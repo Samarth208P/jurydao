@@ -48,7 +48,8 @@ contract GovernorSortition is IEntropyConsumer {
         _;
     }
 
-    constructor(address _entropy, address _provider, address _registry) {
+    // ✅ FIXED: Added "payable" to constructor
+    constructor(address _entropy, address _provider, address _registry) payable {
         entropy = IEntropy(_entropy);
         entropyProvider = _provider;
         registry = IJurorRegistry(_registry);

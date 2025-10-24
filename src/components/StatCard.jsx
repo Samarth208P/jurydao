@@ -1,30 +1,30 @@
 import React from 'react'
 import { motion } from 'framer-motion'
 
-const StatCard = ({ icon: Icon, label, value, color = 'blue', index = 0 }) => {
-    const colors = {
-        blue: 'from-blue-500 to-blue-600',
-        purple: 'from-purple-500 to-purple-600',
-        green: 'from-green-500 to-green-600',
-        red: 'from-red-500 to-red-600',
+const StatCard = ({ icon: Icon, label, value, subtitle, color = 'blue', index = 0 }) => {
+    const colorClasses = {
+        blue: 'text-blue-500',
+        green: 'text-green-500',
+        red: 'text-red-500',
+        purple: 'text-purple-500',
+        yellow: 'text-yellow-500',
     }
 
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0.9 }}
-            animate={{ opacity: 1, scale: 1 }}
-            transition={{ delay: index * 0.1 }}
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ delay: 0.1 * index }}
             className="card"
         >
-            <div className="flex items-center gap-4">
-                <div className={`w-12 h-12 rounded-xl bg-gradient-to-br ${colors[color]} flex items-center justify-center`}>
-                    <Icon size={24} className="text-white" />
-                </div>
-                <div>
-                    <p className="text-gray-400 text-sm">{label}</p>
-                    <p className="text-2xl font-bold">{value}</p>
-                </div>
+            <div className="flex items-center justify-between mb-2">
+                <span className="text-gray-400 text-sm">{label}</span>
+                <Icon className={colorClasses[color]} size={20} />
             </div>
+            <div className="text-2xl md:text-3xl font-bold mb-1">{value}</div>
+            {subtitle && (
+                <div className="text-xs text-gray-500">{subtitle}</div>
+            )}
         </motion.div>
     )
 }

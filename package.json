@@ -10,6 +10,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@pythnetwork/entropy-sdk-solidity": "^2.1.0",
     "ethers": "^6.15.0",
     "framer-motion": "^12.23.24",
     "lucide-react": "^0.546.0",
@@ -31,5 +32,21 @@
     "postcss": "^8.5.6",
     "tailwindcss": "^3.4.17",
     "vite": "^7.1.7"
-  }
+  },
+  "description": "**Foundry is a blazing fast, portable and modular toolkit for Ethereum application development written in Rust.**",
+  "main": "eslint.config.js",
+  "directories": {
+    "lib": "lib"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Samarth208P/jurydao.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/Samarth208P/jurydao/issues"
+  },
+  "homepage": "https://github.com/Samarth208P/jurydao#readme"
 }
