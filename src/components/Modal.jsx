@@ -19,37 +19,36 @@ const Modal = ({ isOpen, onClose, title, children }) => {
                     {/* Modal */}
                     <div className="fixed inset-0 flex items-center justify-center z-50 p-4">
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.95, y: 20 }}
-                            animate={{ opacity: 1, scale: 1, y: 0 }}
-                            exit={{ opacity: 0, scale: 0.95, y: 20 }}
-                            transition={{ type: 'spring', duration: 0.5 }}
-                            className="bg-gray-800/95 backdrop-blur-xl border border-gray-700/50 rounded-2xl p-8 max-w-2xl w-full shadow-2xl relative overflow-hidden"
+                            initial={{ opacity: 0, scale: 0.95 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            exit={{ opacity: 0, scale: 0.95 }}
                             onClick={(e) => e.stopPropagation()}
+                            className="relative w-full max-w-lg"
                         >
-                            {/* Gradient background */}
-                            <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 via-purple-500/5 to-pink-500/5 pointer-events-none" />
+                            <div className="bg-gray-900 border border-white/10 rounded-xl shadow-2xl overflow-hidden">
+                                {/* Gradient background */}
+                                <div className="absolute inset-0 bg-gradient-to-br from-blue-500/5 to-purple-500/5" />
 
-                            {/* Content */}
-                            <div className="relative z-10">
-                                {/* Header */}
-                                <div className="flex items-center justify-between mb-6">
-                                    <h2 className="text-2xl font-bold">{title}</h2>
-                                    <motion.button
-                                        onClick={onClose}
-                                        whileHover={{ scale: 1.1, rotate: 90 }}
-                                        whileTap={{ scale: 0.9 }}
-                                        className="p-2 bg-gray-700/50 hover:bg-gray-700 rounded-xl transition-colors"
-                                    >
-                                        <X size={20} />
-                                    </motion.button>
+                                {/* Content */}
+                                <div className="relative">
+                                    {/* Header */}
+                                    <div className="flex items-center justify-between p-6 border-b border-white/10">
+                                        <h3 className="text-xl font-bold text-white">{title}</h3>
+                                        <button
+                                            onClick={onClose}
+                                            className="p-2 hover:bg-white/10 rounded-lg transition-colors"
+                                        >
+                                            <X className="w-5 h-5 text-gray-400" />
+                                        </button>
+                                    </div>
+
+                                    {/* Body */}
+                                    <div className="p-6">{children}</div>
                                 </div>
 
-                                {/* Body */}
-                                {children}
+                                {/* Glow effect */}
+                                <div className="absolute inset-0 bg-gradient-to-t from-blue-500/10 via-transparent to-transparent pointer-events-none" />
                             </div>
-
-                            {/* Glow effect */}
-                            <div className="absolute -inset-1 bg-gradient-to-r from-blue-500/20 to-purple-500/20 blur-2xl opacity-0 group-hover:opacity-100 transition-opacity duration-500 pointer-events-none" />
                         </motion.div>
                     </div>
                 </>

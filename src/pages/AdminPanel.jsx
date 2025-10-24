@@ -1,17 +1,19 @@
 import React, { useState, useEffect } from 'react'
 import { useContract } from '../hooks/useContract'
 import { useWallet } from '../context/WalletContext'
-import { DollarSign, TrendingUp, Shield, Wallet, AlertCircle } from 'lucide-react'
+import { DollarSign, TrendingUp, Shield, Wallet, AlertCircle, Settings } from 'lucide-react'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 
 const AdminPanel = () => {
     const [balance, setBalance] = useState('0')
-    const [withdrawAmount, setWithdrawAmount] = useState('')
+    const [gasRefundAmount, setGasRefundAmount] = useState('0')
+    const [newGasRefund, setNewGasRefund] = useState('')
     const [isOwner, setIsOwner] = useState(false)
     const [loading, setLoading] = useState(true)
     const [withdrawing, setWithdrawing] = useState(false)
+    const [updating, setUpdating] = useState(false)
 
     const { account, isConnected, connectWallet, provider } = useWallet()
     const governor = useContract('governor')
@@ -20,6 +22,7 @@ const AdminPanel = () => {
         if (governor && account) {
             checkOwnership()
             fetchBalance()
+            fetchGasRefundAmount()
         }
     }, [governor, account])
 
@@ -30,9 +33,8 @@ const AdminPanel = () => {
             const owner = await governor.owner()
             const isOwnerResult = owner.toLowerCase() === account.toLowerCase()
             setIsOwner(isOwnerResult)
-            console.log('Is owner:', isOwnerResult)
         } catch (error) {
-            console.error('Error checking ownership:', error.message)
+            // Silent error
         } finally {
             setLoading(false)
         }
@@ -42,54 +44,80 @@ const AdminPanel = () => {
         if (!governor || !provider) return
 
         try {
-            // Get contract address
             const contractAddress = await governor.getAddress()
-
-            // Get ETH balance using provider
             const balance = await provider.getBalance(contractAddress)
             const balanceInEth = ethers.formatEther(balance)
-
             setBalance(balanceInEth)
-            console.log('✅ Contract balance:', balanceInEth, 'ETH')
         } catch (error) {
-            console.error('❌ Error fetching balance:', error.message)
+            // Silent error
+        }
+    }
+
+    const fetchGasRefundAmount = async () => {
+        if (!governor) return
+
+        try {
+            const amount = await governor.gasRefundAmount()
+            setGasRefundAmount(ethers.formatEther(amount))
+        } catch (error) {
+            // Silent error
         }
     }
 
     const handleWithdraw = async () => {
-        if (!governor || !withdrawAmount) {
-            toast.error('Please enter an amount')
-            return
-        }
-
-        const amount = parseFloat(withdrawAmount)
-        if (amount <= 0 || amount > parseFloat(balance)) {
-            toast.error('Invalid amount')
+        if (!governor) {
+            toast.error('Contract not loaded')
             return
         }
 
         setWithdrawing(true)
 
         try {
-            console.log('Withdrawing:', amount, 'ETH')
-
-            const amountInWei = ethers.parseEther(withdrawAmount)
-            const tx = await governor.withdraw(amountInWei)
-
-            toast.loading('Withdrawing...', { id: 'withdraw' })
+            const tx = await governor.withdrawUnusedFees()
+            toast.loading('Withdrawing unused fees...', { id: 'withdraw' })
             await tx.wait()
 
-            toast.success(`Successfully withdrew ${amount} ETH`, { id: 'withdraw' })
-            console.log('✅ Withdrawal successful')
+            toast.success('Successfully withdrew unused fees', { id: 'withdraw' })
 
             // Refresh balance
             fetchBalance()
-            setWithdrawAmount('')
         } catch (error) {
-            console.error('❌ Withdraw error:', error)
-            toast.error('Failed to withdraw', { id: 'withdraw' })
+            toast.error(error.reason || 'Failed to withdraw', { id: 'withdraw' })
         } finally {
             setWithdrawing(false)
+        }
+    }
+
+    const handleUpdateGasRefund = async () => {
+        if (!governor || !newGasRefund) {
+            toast.error('Please enter a gas refund amount')
+            return
+        }
+
+        const amount = parseFloat(newGasRefund)
+        if (amount < 0) {
+            toast.error('Amount must be positive')
+            return
+        }
+
+        setUpdating(true)
+
+        try {
+            const amountInWei = ethers.parseEther(newGasRefund)
+            const tx = await governor.setGasRefundAmount(amountInWei)
+
+            toast.loading('Updating gas refund amount...', { id: 'update' })
+            await tx.wait()
+
+            toast.success(`Gas refund updated to ${amount} ETH`, { id: 'update' })
+
+            // Refresh gas refund amount
+            fetchGasRefundAmount()
+            setNewGasRefund('')
+        } catch (error) {
+            toast.error(error.reason || 'Failed to update', { id: 'update' })
+        } finally {
+            setUpdating(false)
         }
     }
 
@@ -169,11 +197,11 @@ const AdminPanel = () => {
                             className="card"
                         >
                             <div className="flex items-center justify-between mb-3">
-                                <span className="text-gray-400">Your Address</span>
-                                <Wallet className="text-blue-400" size={20} />
+                                <span className="text-gray-400">Gas Refund/Vote</span>
+                                <TrendingUp className="text-blue-400" size={20} />
                             </div>
-                            <div className="text-sm font-mono">
-                                {account?.slice(0, 10)}...{account?.slice(-8)}
+                            <div className="text-2xl font-bold text-blue-400">
+                                {parseFloat(gasRefundAmount).toFixed(4)} ETH
                             </div>
                         </motion.div>
 
@@ -196,48 +224,29 @@ const AdminPanel = () => {
                         initial={{ opacity: 0, y: 20 }}
                         animate={{ opacity: 1, y: 0 }}
                         transition={{ delay: 0.3 }}
-                        className="card"
+                        className="card mb-6"
                     >
                         <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
-                            <TrendingUp size={24} />
-                            Withdraw Funds
+                            <Wallet size={24} />
+                            Withdraw Unused Fees
                         </h2>
 
                         <div className="card bg-blue-500/5 border-blue-500/20 mb-6">
                             <p className="text-sm text-gray-400">
-                                <strong className="text-blue-400">Info:</strong> Withdraw ETH from the contract to your
-                                wallet. This includes proposal creation fees and unused gas sponsorship funds.
+                                <strong className="text-blue-400">Info:</strong> Withdraw all unused ETH from the contract.
+                                This includes unspent gas sponsorship funds from proposals that didn't fully utilize their allocated fees.
                             </p>
                         </div>
 
-                        <div className="mb-6">
-                            <label className="block text-sm font-semibold mb-2">Amount (ETH)</label>
-                            <div className="relative">
-                                <input
-                                    type="number"
-                                    value={withdrawAmount}
-                                    onChange={(e) => setWithdrawAmount(e.target.value)}
-                                    placeholder="0.0"
-                                    step="0.001"
-                                    min="0"
-                                    max={balance}
-                                    className="input pr-20"
-                                />
-                                <button
-                                    onClick={() => setWithdrawAmount(balance)}
-                                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 rounded bg-blue-500/20 text-blue-400 text-sm hover:bg-blue-500/30 transition-colors"
-                                >
-                                    MAX
-                                </button>
-                            </div>
-                            <p className="text-sm text-gray-400 mt-2">
-                                Available: <strong>{parseFloat(balance).toFixed(6)} ETH</strong>
+                        <div className="mb-4">
+                            <p className="text-gray-400 mb-2">
+                                Available Balance: <strong className="text-white">{parseFloat(balance).toFixed(6)} ETH</strong>
                             </p>
                         </div>
 
                         <button
                             onClick={handleWithdraw}
-                            disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                            disabled={withdrawing || parseFloat(balance) === 0}
                             className="btn btn-primary w-full"
                         >
                             {withdrawing ? (
@@ -248,7 +257,61 @@ const AdminPanel = () => {
                             ) : (
                                 <>
                                     <DollarSign size={20} />
-                                    Withdraw Funds
+                                    Withdraw All Unused Fees
+                                </>
+                            )}
+                        </button>
+                    </motion.div>
+
+                    {/* Gas Refund Settings */}
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.4 }}
+                        className="card"
+                    >
+                        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                            <Settings size={24} />
+                            Gas Refund Settings
+                        </h2>
+
+                        <div className="card bg-purple-500/5 border-purple-500/20 mb-6">
+                            <p className="text-sm text-gray-400">
+                                <strong className="text-purple-400">Current Setting:</strong> Each juror receives{' '}
+                                <strong className="text-white">{parseFloat(gasRefundAmount).toFixed(4)} ETH</strong> as a gas refund when they vote.
+                            </p>
+                        </div>
+
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-2">New Gas Refund Amount (ETH)</label>
+                            <input
+                                type="number"
+                                value={newGasRefund}
+                                onChange={(e) => setNewGasRefund(e.target.value)}
+                                placeholder="0.001"
+                                step="0.0001"
+                                min="0"
+                                className="input"
+                            />
+                            <p className="text-sm text-gray-400 mt-2">
+                                Recommended: 0.001 - 0.005 ETH per vote
+                            </p>
+                        </div>
+
+                        <button
+                            onClick={handleUpdateGasRefund}
+                            disabled={updating || !newGasRefund}
+                            className="btn btn-primary w-full"
+                        >
+                            {updating ? (
+                                <>
+                                    <span className="spinner"></span>
+                                    Updating...
+                                </>
+                            ) : (
+                                <>
+                                    <Settings size={20} />
+                                    Update Gas Refund
                                 </>
                             )}
                         </button>
@@ -266,8 +329,8 @@ const AdminPanel = () => {
                             <div>
                                 <p className="font-semibold text-yellow-500 mb-1">Important</p>
                                 <p className="text-sm text-gray-400">
-                                    Only withdraw funds that are not reserved for active proposals. Withdrawing too much
-                                    may prevent gas sponsorship from working properly.
+                                    The <strong>withdrawUnusedFees()</strong> function only withdraws fees that are not reserved for active proposals.
+                                    Changing gas refund amounts will only affect new proposals created after the update.
                                 </p>
                             </div>
                         </div>

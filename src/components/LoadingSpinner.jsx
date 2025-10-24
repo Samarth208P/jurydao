@@ -11,18 +11,10 @@ const LoadingSpinner = ({ size = 'md', className = '' }) => {
     return (
         <div className={`flex items-center justify-center ${className}`}>
             <motion.div
-                className={`${sizes[size]} relative`}
+                className={`${sizes[size]} border-4 border-blue-500/20 border-t-blue-500 rounded-full`}
                 animate={{ rotate: 360 }}
                 transition={{ duration: 1, repeat: Infinity, ease: 'linear' }}
-            >
-                <div className="absolute inset-0 border-4 border-gray-700/30 rounded-full" />
-                <div className="absolute inset-0 border-4 border-transparent border-t-blue-500 border-r-purple-500 rounded-full" />
-                <motion.div
-                    className="absolute inset-2 border-4 border-transparent border-b-pink-500 border-l-blue-400 rounded-full"
-                    animate={{ rotate: -360 }}
-                    transition={{ duration: 1.5, repeat: Infinity, ease: 'linear' }}
-                />
-            </motion.div>
+            />
         </div>
     )
 }

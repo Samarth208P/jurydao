@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useContract } from '../hooks/useContract'
 import { useWallet } from '../context/WalletContext'
-import { ArrowLeft, ThumbsUp, ThumbsDown, Users, Clock, User, CheckCircle, AlertCircle, Activity, Zap, DollarSign } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, Users, Clock, User, CheckCircle, AlertCircle, Activity, Zap } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import { motion } from 'framer-motion'
@@ -36,39 +36,33 @@ const ProposalDetail = () => {
         if (!governor || !id) return
 
         try {
-            console.log('📥 Fetching proposal', id)
-
             const data = await governor.getProposal(id)
-            console.log('Raw proposal data:', data)
 
+            // Contract returns: [title, description, proposer, forVotes, againstVotes, deadline, state, jurySize]
             const proposalData = {
                 id,
-                title: data[0] || '',
-                description: data[1] || '',
-                proposer: data[2] || '',
-                forVotes: data[3] || 0n,
-                againstVotes: data[4] || 0n,
-                deadline: data[5] || 0n,
-                state: data[6] || 0,
-                jurySize: data[7] || 0n,
-                feesSponsoredByProposer: data[8] || false,
-                gasPerVote: data[9] || 0n,
+                title: data[0],
+                description: data[1],
+                proposer: data[2],
+                forVotes: Number(data[3]),
+                againstVotes: Number(data[4]),
+                deadline: Number(data[5]),
+                state: Number(data[6]),
+                jurySize: Number(data[7]),
             }
 
             setProposal(proposalData)
 
-            const forVotes = Number(proposalData.forVotes)
-            const againstVotes = Number(proposalData.againstVotes)
-            const totalVotesCast = forVotes + againstVotes
-            const jurySize = Number(proposalData.jurySize)
+            const totalVotesCast = proposalData.forVotes + proposalData.againstVotes
 
             setVoteProgress({
                 votesCast: totalVotesCast,
-                total: jurySize
+                total: proposalData.jurySize
             })
 
+            // Fetch jurors list
             try {
-                const jurorsList = await governor.getJurors(id)
+                const jurorsList = await governor.getProposalJurors(id)
                 const jurorsArray = Array.isArray(jurorsList) ? jurorsList : []
                 setJurors(jurorsArray)
 
@@ -83,19 +77,15 @@ const ProposalDetail = () => {
                             const voted = await governor.hasVoted(id, account)
                             setHasVoted(voted)
                         } catch (error) {
-                            console.error('Error checking vote status:', error)
                             setHasVoted(false)
                         }
                     }
                 }
             } catch (err) {
-                console.warn('Could not fetch jurors:', err.message)
+                // Jurors not loaded yet - Pyth Entropy still processing
                 setJurors([])
             }
-
-            console.log('✅ Proposal loaded')
         } catch (error) {
-            console.error('Fetch proposal error:', error)
             toast.error('Failed to load proposal')
         } finally {
             setLoading(false)
@@ -107,9 +97,7 @@ const ProposalDetail = () => {
 
         setVoting(true)
         try {
-            console.log('🗳️ Voting:', support ? 'For' : 'Against')
-
-            const tx = await governor.vote(id, support)
+            const tx = await governor.castVote(id, support)
             toast.loading('Submitting vote...', { id: 'vote' })
 
             await tx.wait()
@@ -127,20 +115,23 @@ const ProposalDetail = () => {
 
             setTimeout(fetchProposal, 2000)
         } catch (error) {
-            console.error('Vote error:', error)
-            const errorMsg = error.reason || error.message || String(error)
+            let errorMsg = 'Vote failed'
 
-            if (errorMsg.includes('Already voted')) {
-                toast.error('❌ You already voted!', { id: 'vote' })
-            } else if (errorMsg.includes('Not a selected juror')) {
-                toast.error('❌ You are not a selected juror!', { id: 'vote' })
-            } else if (errorMsg.includes('Voting ended')) {
-                toast.error('❌ Voting period has ended!', { id: 'vote' })
-            } else if (errorMsg.includes('Not active')) {
-                toast.error('❌ Proposal is not active!', { id: 'vote' })
-            } else {
-                toast.error('Vote failed: ' + errorMsg, { id: 'vote' })
+            if (error.code === 'ACTION_REJECTED') {
+                errorMsg = 'Transaction rejected'
+            } else if (error.message?.includes('Already voted')) {
+                errorMsg = 'You already voted!'
+            } else if (error.message?.includes('Not a selected juror')) {
+                errorMsg = 'You are not a selected juror!'
+            } else if (error.message?.includes('Voting ended')) {
+                errorMsg = 'Voting period has ended!'
+            } else if (error.message?.includes('Not active')) {
+                errorMsg = 'Proposal is not active!'
+            } else if (error.reason) {
+                errorMsg = error.reason
             }
+
+            toast.error(errorMsg, { id: 'vote' })
         } finally {
             setVoting(false)
         }
@@ -151,9 +142,7 @@ const ProposalDetail = () => {
 
         setExecuting(true)
         try {
-            console.log('⚙️ Executing proposal...')
-
-            const tx = await governor.execute(id)
+            const tx = await governor.executeProposal(id)
             toast.loading('Executing proposal...', { id: 'execute' })
 
             await tx.wait()
@@ -161,9 +150,8 @@ const ProposalDetail = () => {
             toast.success('Proposal executed successfully!', { id: 'execute', duration: 5000 })
             fetchProposal()
         } catch (error) {
-            console.error('Execute error:', error)
-            const errorMsg = error.reason || error.message
-            toast.error('Execution failed: ' + errorMsg, { id: 'execute' })
+            const errorMsg = error.reason || error.message || 'Execution failed'
+            toast.error(errorMsg, { id: 'execute' })
         } finally {
             setExecuting(false)
         }
@@ -176,7 +164,7 @@ const ProposalDetail = () => {
 
     const formatDate = (timestamp) => {
         if (!timestamp) return ''
-        return new Date(Number(timestamp) * 1000).toLocaleString('en-US', {
+        return new Date(timestamp * 1000).toLocaleString('en-US', {
             month: 'short',
             day: 'numeric',
             year: 'numeric',
@@ -187,7 +175,7 @@ const ProposalDetail = () => {
 
     const formatTimeLeft = (deadline) => {
         const now = Math.floor(Date.now() / 1000)
-        const timeLeft = Number(deadline) - now
+        const timeLeft = deadline - now
 
         if (timeLeft <= 0) return 'Ended'
 
@@ -208,7 +196,7 @@ const ProposalDetail = () => {
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-900">
-                <LoadingSpinner size="lg" text="Loading proposal..." />
+                <LoadingSpinner size="lg" />
             </div>
         )
     }
@@ -229,13 +217,13 @@ const ProposalDetail = () => {
         )
     }
 
-    const totalVotes = Number(proposal.forVotes) + Number(proposal.againstVotes)
-    const forPercentage = calculatePercentage(Number(proposal.forVotes), totalVotes)
+    const totalVotes = proposal.forVotes + proposal.againstVotes
+    const forPercentage = calculatePercentage(proposal.forVotes, totalVotes)
     const now = Math.floor(Date.now() / 1000)
 
-    const isActive = Number(proposal.state) === 1 && now < Number(proposal.deadline)
+    const isActive = proposal.state === 1 && now < proposal.deadline
     const canVote = isSelectedJuror && !hasVoted && isActive
-    const canExecute = Number(proposal.state) === 1 && (now >= Number(proposal.deadline) || voteProgress.votesCast >= voteProgress.total)
+    const canExecute = proposal.state === 1 && (now >= proposal.deadline || voteProgress.votesCast >= voteProgress.total)
     const allVoted = voteProgress.votesCast >= voteProgress.total && voteProgress.total > 0
     const voteProgressPercent = voteProgress.total > 0 ? (voteProgress.votesCast / voteProgress.total) * 100 : 0
 
@@ -249,8 +237,8 @@ const ProposalDetail = () => {
     ]
 
     const statusBadge = {
-        text: stateNames[Number(proposal.state)] || 'Unknown',
-        color: stateColors[Number(proposal.state)] || stateColors[0]
+        text: stateNames[proposal.state] || 'Unknown',
+        color: stateColors[proposal.state] || stateColors[0]
     }
 
     return (
@@ -290,14 +278,8 @@ const ProposalDetail = () => {
                             </div>
                             <div className="flex items-center gap-2">
                                 <Users size={16} />
-                                <span>{Number(proposal.jurySize)} Juror{Number(proposal.jurySize) !== 1 ? 's' : ''}</span>
+                                <span>{proposal.jurySize} Juror{proposal.jurySize !== 1 ? 's' : ''}</span>
                             </div>
-                            {proposal.feesSponsoredByProposer && (
-                                <div className="flex items-center gap-2 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/30">
-                                    <DollarSign size={16} className="text-green-400" />
-                                    <span className="text-green-400 font-semibold">Gas Sponsored</span>
-                                </div>
-                            )}
                         </div>
 
                         <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">{proposal.description}</p>
@@ -322,7 +304,7 @@ const ProposalDetail = () => {
 
                             <p className="text-gray-300 mb-4">
                                 The voting deadline has passed with <strong className="text-white">{voteProgress.votesCast}/{voteProgress.total}</strong> jurors voting.
-                                Execute this proposal to finalize the outcome and update its status to {Number(proposal.forVotes) > Number(proposal.againstVotes) ?
+                                Execute this proposal to finalize the outcome and update its status to {proposal.forVotes > proposal.againstVotes ?
                                 <span className="text-green-400 font-semibold">Succeeded</span> :
                                 <span className="text-red-400 font-semibold">Defeated</span>}.
                             </p>
@@ -390,14 +372,14 @@ const ProposalDetail = () => {
                                     <ThumbsUp size={20} className="text-green-500" />
                                     <span className="font-semibold">For</span>
                                 </div>
-                                <div className="text-3xl font-bold text-green-500">{Number(proposal.forVotes)}</div>
+                                <div className="text-3xl font-bold text-green-500">{proposal.forVotes}</div>
                             </div>
                             <div className="bg-red-500/5 border border-red-500/20 rounded-lg p-4 hover:bg-red-500/10 transition-colors">
                                 <div className="flex items-center gap-2 mb-2">
                                     <ThumbsDown size={20} className="text-red-500" />
                                     <span className="font-semibold">Against</span>
                                 </div>
-                                <div className="text-3xl font-bold text-red-500">{Number(proposal.againstVotes)}</div>
+                                <div className="text-3xl font-bold text-red-500">{proposal.againstVotes}</div>
                             </div>
                         </div>
 

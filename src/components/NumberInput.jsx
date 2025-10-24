@@ -2,7 +2,15 @@ import React from 'react'
 import { Minus, Plus } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-const NumberInput = ({ value, onChange, min = 1, max = 100, label, description, compact = false }) => {
+const NumberInput = ({
+                         value,
+                         onChange,
+                         min = 1,
+                         max = 100,
+                         label,
+                         description,
+                         compact = false
+                     }) => {
     const handleIncrement = () => {
         if (value < max) onChange(value + 1)
     }
@@ -18,75 +26,54 @@ const NumberInput = ({ value, onChange, min = 1, max = 100, label, description, 
     const percentage = ((value - min) / (max - min)) * 100
 
     return (
-        <div className="space-y-3">
+        <div className={compact ? 'space-y-2' : 'space-y-4'}>
             {label && (
                 <div>
-                    <label className="block text-sm font-semibold mb-1">{label}</label>
+                    <label className="block text-sm font-medium text-gray-400 mb-1">
+                        {label}
+                    </label>
                     {description && (
-                        <p className="text-xs text-gray-400">{description}</p>
+                        <p className="text-xs text-gray-500">{description}</p>
                     )}
                 </div>
             )}
 
-            {/* Value Display with Controls */}
-            <div className="flex items-center gap-3">
-                {/* Decrement Button */}
-                <motion.button
+            <div className="flex items-center gap-4">
+                <button
                     type="button"
                     onClick={handleDecrement}
                     disabled={value <= min}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="p-2 rounded-lg bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700 hover:border-blue-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all group"
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <Minus size={16} className="text-gray-400 group-hover:text-blue-400 transition-colors" />
-                </motion.button>
+                    <Minus className="w-4 h-4 text-white" />
+                </button>
 
-                {/* Value Display */}
-                <div className="flex-1 text-center">
-                    <motion.div
-                        key={value}
-                        initial={{ scale: 1.2, color: '#3b82f6' }}
-                        animate={{ scale: 1, color: '#f9fafb' }}
-                        className={compact ? "text-3xl font-bold" : "text-5xl font-bold"}
-                    >
-                        {value}
-                    </motion.div>
-                    <div className="text-xs text-gray-400 mt-0.5">
-                        {min} - {max}
-                    </div>
+                <div className="flex-1">
+                    <input
+                        type="range"
+                        min={min}
+                        max={max}
+                        value={value}
+                        onChange={handleSliderChange}
+                        className="w-full h-2 bg-white/5 rounded-lg appearance-none cursor-pointer"
+                        style={{
+                            background: `linear-gradient(to right, rgb(59, 130, 246) 0%, rgb(59, 130, 246) ${percentage}%, rgba(255,255,255,0.05) ${percentage}%, rgba(255,255,255,0.05) 100%)`
+                        }}
+                    />
                 </div>
 
-                {/* Increment Button */}
-                <motion.button
+                <button
                     type="button"
                     onClick={handleIncrement}
                     disabled={value >= max}
-                    whileHover={{ scale: 1.1 }}
-                    whileTap={{ scale: 0.9 }}
-                    className="p-2 rounded-lg bg-gray-700/50 border border-gray-600/50 hover:bg-gray-700 hover:border-blue-500/50 disabled:opacity-30 disabled:cursor-not-allowed transition-all group"
+                    className="p-2 bg-white/5 hover:bg-white/10 border border-white/10 rounded-lg transition-all disabled:opacity-50 disabled:cursor-not-allowed"
                 >
-                    <Plus size={16} className="text-gray-400 group-hover:text-blue-400 transition-colors" />
-                </motion.button>
-            </div>
+                    <Plus className="w-4 h-4 text-white" />
+                </button>
 
-            {/* Slider */}
-            <div className="relative">
-                <input
-                    type="range"
-                    min={min}
-                    max={max}
-                    value={value}
-                    onChange={handleSliderChange}
-                    className="w-full h-1.5 bg-gray-700/50 rounded-lg appearance-none cursor-pointer slider"
-                    style={{
-                        background: `linear-gradient(to right, 
-                            rgb(59, 130, 246) 0%, 
-                            rgb(59, 130, 246) ${percentage}%, 
-                            rgb(55, 65, 81) ${percentage}%, 
-                            rgb(55, 65, 81) 100%)`
-                    }}
-                />
+                <div className="min-w-[60px] text-center">
+                    <span className="text-2xl font-bold text-white">{value}</span>
+                </div>
             </div>
         </div>
     )

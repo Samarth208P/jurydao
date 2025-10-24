@@ -39,13 +39,9 @@ export const formatAddress = (address) => {
     return `${address.slice(0, 6)}...${address.slice(-4)}`
 }
 
-export const formatBalance = (balance, decimals = 18) => {
-    if (!balance) return '0'
-    const value = Number(balance) / Math.pow(10, decimals)
-    return value.toFixed(2)
-}
-
-export const calculatePercentage = (value, total) => {
-    if (total === 0) return 0
-    return Math.round((value / total) * 100)
+export const formatBalance = (balance) => {
+    const num = parseFloat(balance)
+    if (num === 0) return '0'
+    if (num < 0.01) return '< 0.01'
+    return num.toFixed(2)
 }

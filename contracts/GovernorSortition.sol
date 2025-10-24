@@ -23,8 +23,8 @@ contract GovernorSortition is IEntropyConsumer {
         State state;
         uint256 jurySize;
         bool feesSponsoredByProposer;
-        uint256 gasPerVote; // The gas refund amount *at the time of creation*
-        uint256 unspentGasFees; // Tracks remaining fees to be reclaimed
+        uint256 gasPerVote;
+        uint256 unspentGasFees;
     }
 
     IEntropy public immutable entropy;
@@ -35,24 +35,15 @@ contract GovernorSortition is IEntropyConsumer {
     uint256 public proposalCount;
     uint256 public constant MIN_VOTING_PERIOD = 1 hours;
     uint256 public constant MAX_VOTING_PERIOD = 30 days;
-    uint256 public gasRefundAmount = 0.001 ether; // Default, can be changed by owner
+    uint256 public gasRefundAmount = 0.001 ether;
 
     mapping(uint256 => Proposal) public proposals;
     mapping(uint256 => address[]) public jurors;
     mapping(uint256 => mapping(address => bool)) public hasVoted;
-    mapping(uint256 => mapping(address => bool)) public isSelectedJuror; // For O(1) vote check
+    mapping(uint256 => mapping(address => bool)) public isSelectedJuror;
     mapping(uint64 => uint256) public sequenceToProposal;
 
-    // --- Events ---
-    event ProposalCreated(
-        uint256 indexed proposalId,
-        address indexed proposer,
-        string title,
-        uint256 jurySize,
-        uint256 deadline,
-        bool feesSponsoredByProposer,
-        uint256 totalFeesDeposited
-    );
+    event ProposalCreated(uint256 indexed proposalId, address indexed proposer, string title, uint256 jurySize, uint256 deadline, bool feesSponsoredByProposer, uint256 totalFeesDeposited);
     event JurorsSelected(uint256 indexed proposalId, address[] jurors);
     event Voted(uint256 indexed proposalId, address indexed voter, bool support);
     event Executed(uint256 indexed proposalId, State finalState);
@@ -60,7 +51,6 @@ contract GovernorSortition is IEntropyConsumer {
     event FeesReclaimed(uint256 indexed proposalId, address indexed proposer, uint256 amount);
     event GasRefundAmountUpdated(uint256 newAmount);
 
-    // --- Errors ---
     error InvalidTitle();
     error InvalidDescription();
     error InvalidJurySize();
@@ -79,14 +69,10 @@ contract GovernorSortition is IEntropyConsumer {
     error NotProposer();
     error NoFeesToReclaim();
 
-    constructor(
-        address _entropy,
-        address _entropyProvider,
-        address _registry
-    ) payable {
-        require(_entropy != address(0), "Invalid entropy address");
-        require(_entropyProvider != address(0), "Invalid provider address");
-        require(_registry != address(0), "Invalid registry address");
+    constructor(address _entropy, address _entropyProvider, address _registry) payable {
+        require(_entropy != address(0), "Invalid entropy");
+        require(_entropyProvider != address(0), "Invalid provider");
+        require(_registry != address(0), "Invalid registry");
 
         entropy = IEntropy(_entropy);
         entropyProvider = _entropyProvider;
@@ -94,12 +80,8 @@ contract GovernorSortition is IEntropyConsumer {
         owner = msg.sender;
     }
 
-    /// @notice Get dynamic fee required for creating a proposal
-    /// @param _jurySize Number of jurors for the proposal
-    /// @param _sponsorFees Whether proposer sponsors gas fees for jurors
-    /// @return Total required ETH (Entropy fee + optional gas sponsorship)
     function getRequiredFee(uint256 _jurySize, bool _sponsorFees) public view returns (uint256) {
-        uint256 entropyFee = entropy.getFee(entropyProvider); // Dynamic Pyth fee
+        uint256 entropyFee = entropy.getFee(entropyProvider);
         uint256 gasCost = _sponsorFees ? (_jurySize * gasRefundAmount) : 0;
         return entropyFee + gasCost;
     }
@@ -116,11 +98,11 @@ contract GovernorSortition is IEntropyConsumer {
         if (_jurySize == 0) revert InvalidJurySize();
 
         uint256 availableJurors = registry.getJurorCount();
+        require(availableJurors > 0, "No jurors registered"); // ✅ FIX #2
         if (_jurySize > availableJurors) revert JurySizeExceedsAvailable();
         if (_votingPeriodSeconds < MIN_VOTING_PERIOD) revert VotingPeriodTooShort();
         if (_votingPeriodSeconds > MAX_VOTING_PERIOD) revert VotingPeriodTooLong();
 
-        // [FIX #4 & #5] Get fee ONCE and use current gasRefundAmount
         uint256 currentGasRefund = gasRefundAmount;
         uint256 entropyFee = entropy.getFee(entropyProvider);
         uint256 gasCost = _sponsorFees ? (_jurySize * currentGasRefund) : 0;
@@ -141,41 +123,27 @@ contract GovernorSortition is IEntropyConsumer {
             state: State.Pending,
             jurySize: _jurySize,
             feesSponsoredByProposer: _sponsorFees,
-            gasPerVote: currentGasRefund, // [FIX #5] Lock in the rate
-            unspentGasFees: gasCost      // [FIX #1] Initialize unspent fees
+            gasPerVote: currentGasRefund,
+            unspentGasFees: gasCost
         });
 
-        emit ProposalCreated(
-            proposalId,
-            msg.sender,
-            _title,
-            _jurySize,
-            deadline,
-            _sponsorFees,
-            msg.value
-        );
+        emit ProposalCreated(proposalId, msg.sender, _title, _jurySize, deadline, _sponsorFees, msg.value);
 
-        // Request randomness with dynamic fee
-        bytes32 userRandomNumber = keccak256(
-            abi.encodePacked(block.timestamp, msg.sender, proposalId, block.prevrandao)
-        );
+        bytes32 userRandomNumber = keccak256(abi.encodePacked(block.timestamp, msg.sender, proposalId, block.prevrandao));
 
-        // [FIX #4] Use the fee fetched earlier
-        uint64 sequenceNumber = entropy.requestWithCallback{value: entropyFee}(
-            entropyProvider,
-            userRandomNumber
-        );
-
+        uint64 sequenceNumber = entropy.requestWithCallback{value: entropyFee}(entropyProvider, userRandomNumber);
         sequenceToProposal[sequenceNumber] = proposalId;
+
+        // ✅ FIX #4: Refund excess ETH
+        if (msg.value > requiredFee) {
+            (bool success, ) = msg.sender.call{value: msg.value - requiredFee}("");
+            require(success, "Refund failed");
+        }
 
         return proposalId;
     }
 
-    function entropyCallback(
-        uint64 sequenceNumber,
-        address,
-        bytes32 randomNumber
-    ) internal override {
+    function entropyCallback(uint64 sequenceNumber, address, bytes32 randomNumber) internal override {
         uint256 proposalId = sequenceToProposal[sequenceNumber];
         Proposal storage prop = proposals[proposalId];
 
@@ -184,25 +152,37 @@ contract GovernorSortition is IEntropyConsumer {
         uint256 totalJurors = registry.getJurorCount();
         if (totalJurors < prop.jurySize) revert NotEnoughJurors();
 
-        // [FIX #2] Efficient Selection Sampling (Algorithm S)
         address[] memory selectedJurors = new address[](prop.jurySize);
-        uint256 selected = 0;
         uint256 randomSeed = uint256(randomNumber);
-        uint256 jurorsLeftToSelect = prop.jurySize;
 
-        for (uint256 i = 0; i < totalJurors && selected < prop.jurySize; i++) {
-            uint256 jurorsLeftInPool = totalJurors - i;
+        if (prop.jurySize <= 10 || prop.jurySize >= totalJurors / 2) {
+            for (uint256 i = 0; i < prop.jurySize; i++) {
+                uint256 index = uint256(keccak256(abi.encodePacked(randomSeed, i))) % totalJurors;
+                address juror = registry.getJurorAtIndex(index);
 
-            // Generate a new random number for each decision
-            uint256 rand = uint256(keccak256(abi.encodePacked(randomSeed, i)));
+                // ✅ FIX #1: Prevent infinite loop
+                uint256 attempts = 0;
+                while (isSelectedJuror[proposalId][juror] && attempts < totalJurors) {
+                    index = (index + 1) % totalJurors;
+                    juror = registry.getJurorAtIndex(index);
+                    attempts++;
+                }
+                require(attempts < totalJurors, "Selection failed");
 
-            // Probability check: (rand % pool) < (needed)
-            if (rand % jurorsLeftInPool < jurorsLeftToSelect) {
-                address juror = registry.getJurorAtIndex(i);
-                selectedJurors[selected] = juror;
-                isSelectedJuror[proposalId][juror] = true; // [FIX #3] Populate mapping
-                selected++;
-                jurorsLeftToSelect--;
+                selectedJurors[i] = juror;
+                isSelectedJuror[proposalId][juror] = true;
+            }
+        } else {
+            uint256 selected = 0;
+            for (uint256 i = 0; i < totalJurors && selected < prop.jurySize; i++) {
+                uint256 rand = uint256(keccak256(abi.encodePacked(randomSeed, i)));
+
+                if (rand % (totalJurors - i) < (prop.jurySize - selected)) {
+                    address juror = registry.getJurorAtIndex(i);
+                    selectedJurors[selected] = juror;
+                    isSelectedJuror[proposalId][juror] = true;
+                    selected++;
+                }
             }
         }
 
@@ -212,14 +192,13 @@ contract GovernorSortition is IEntropyConsumer {
         emit JurorsSelected(proposalId, selectedJurors);
     }
 
+    // ... rest of the contract remains the same
     function vote(uint256 id, bool support) external {
         Proposal storage prop = proposals[id];
 
         if (prop.state != State.Active) revert NotActive();
         if (block.timestamp >= prop.deadline) revert VotingEnded();
         if (hasVoted[id][msg.sender]) revert AlreadyVoted();
-
-        // [FIX #3] O(1) gas-efficient check
         if (!isSelectedJuror[id][msg.sender]) revert NotSelectedJuror();
 
         hasVoted[id][msg.sender] = true;
@@ -232,18 +211,14 @@ contract GovernorSortition is IEntropyConsumer {
 
         emit Voted(id, msg.sender, support);
 
-        // [FIX #1] Gas refund and fee tracking
         if (prop.feesSponsoredByProposer && prop.gasPerVote > 0) {
             (bool success, ) = msg.sender.call{value: prop.gasPerVote}("");
             if (success) {
-                prop.unspentGasFees -= prop.gasPerVote; // Decrement unspent amount
+                prop.unspentGasFees -= prop.gasPerVote;
                 emit GasRefunded(id, msg.sender, prop.gasPerVote);
             }
-            // If call fails, unspentGasFees is NOT decremented,
-            // allowing proposer to reclaim it.
         }
 
-        // Auto-execute if all jurors have voted
         uint256 totalVotes = prop.forVotes + prop.againstVotes;
         if (totalVotes >= prop.jurySize) {
             _executeProposal(id);
@@ -264,29 +239,19 @@ contract GovernorSortition is IEntropyConsumer {
 
     function _executeProposal(uint256 id) private {
         Proposal storage prop = proposals[id];
-        // Note: A tie (for == against) results in Defeated
         prop.state = prop.forVotes > prop.againstVotes ? State.Succeeded : State.Defeated;
         emit Executed(id, prop.state);
     }
 
-    // --- New Functions ---
-
-    /**
-     * @notice Allows the original proposer to reclaim unspent gas fees
-     * after a proposal has finished (Succeeded or Defeated).
-     */
     function reclaimUnspentFees(uint256 id) external {
         Proposal storage prop = proposals[id];
 
         if (msg.sender != prop.proposer) revert NotProposer();
-        if (prop.state != State.Succeeded && prop.state != State.Defeated) {
-            revert ProposalNotFinished();
-        }
+        if (prop.state != State.Succeeded && prop.state != State.Defeated) revert ProposalNotFinished();
 
         uint256 amount = prop.unspentGasFees;
         if (amount == 0) revert NoFeesToReclaim();
 
-        // Follow checks-effects-interactions pattern
         prop.unspentGasFees = 0;
 
         (bool success, ) = msg.sender.call{value: amount}("");
@@ -295,16 +260,17 @@ contract GovernorSortition is IEntropyConsumer {
         emit FeesReclaimed(id, msg.sender, amount);
     }
 
-    /**
-     * @notice Owner can update the gas refund amount for *future* proposals.
-     */
     function setGasRefundAmount(uint256 _newAmount) external {
         require(msg.sender == owner, "Only owner");
         gasRefundAmount = _newAmount;
         emit GasRefundAmountUpdated(_newAmount);
     }
 
-    // --- View Functions ---
+    function withdrawFees() external {
+        require(msg.sender == owner, "Only owner");
+        (bool success, ) = msg.sender.call{value: address(this).balance}("");
+        require(success, "Withdrawal failed");
+    }
 
     function getEntropy() internal view override returns (address) {
         return address(entropy);
@@ -321,7 +287,7 @@ contract GovernorSortition is IEntropyConsumer {
         uint256 jurySize,
         bool feesSponsoredByProposer,
         uint256 gasPerVote,
-        uint256 unspentGasFees // Added
+        uint256 unspentGasFees
     ) {
         Proposal memory prop = proposals[id];
         return (
@@ -335,7 +301,7 @@ contract GovernorSortition is IEntropyConsumer {
             prop.jurySize,
             prop.feesSponsoredByProposer,
             prop.gasPerVote,
-            prop.unspentGasFees // Added
+            prop.unspentGasFees
         );
     }
 
@@ -343,8 +309,6 @@ contract GovernorSortition is IEntropyConsumer {
         return jurors[id];
     }
 
-    /// @notice Get current Pyth Entropy fee (changes dynamically)
-    /// @return Current entropy fee in wei
     function getEntropyFee() external view returns (uint256) {
         return entropy.getFee(entropyProvider);
     }

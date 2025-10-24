@@ -28,7 +28,6 @@ export const WalletProvider = ({ children }) => {
 
     const checkConnection = async () => {
         if (!window.ethereum) {
-            console.warn('⚠️ MetaMask not installed')
             return
         }
 
@@ -38,18 +37,16 @@ export const WalletProvider = ({ children }) => {
 
             if (accounts.length > 0) {
                 const signer = await provider.getSigner()
+                const address = await signer.getAddress()
                 const network = await provider.getNetwork()
 
                 setProvider(provider)
                 setSigner(signer)
-                setAccount(accounts[0].address)
+                setAccount(address)
                 setChainId(network.chainId.toString())
-
-                console.log('✅ Wallet already connected:', accounts[0].address)
-                console.log('🔗 Chain ID:', network.chainId.toString())
             }
         } catch (error) {
-            console.error('❌ Error checking connection:', error)
+            // Silent fail on initial check
         }
     }
 
@@ -58,22 +55,14 @@ export const WalletProvider = ({ children }) => {
 
         window.ethereum.on('accountsChanged', handleAccountsChanged)
         window.ethereum.on('chainChanged', handleChainChanged)
-
-        return () => {
-            if (window.ethereum.removeListener) {
-                window.ethereum.removeListener('accountsChanged', handleAccountsChanged)
-                window.ethereum.removeListener('chainChanged', handleChainChanged)
-            }
-        }
     }
 
     const handleAccountsChanged = (accounts) => {
         if (accounts.length === 0) {
             disconnect()
-            toast.error('Wallet disconnected')
         } else {
             setAccount(accounts[0])
-            window.location.reload()
+            toast.success('Account changed')
         }
     }
 
@@ -83,49 +72,37 @@ export const WalletProvider = ({ children }) => {
 
     const connectWallet = async () => {
         if (!window.ethereum) {
-            toast.error('MetaMask not installed!')
-            window.open('https://metamask.io/download/', '_blank')
+            toast.error('Please install MetaMask')
             return
         }
 
         setIsConnecting(true)
-
         try {
-            console.log('🔄 Requesting wallet connection...')
-
-            // Request accounts
-            const accounts = await window.ethereum.request({
-                method: 'eth_requestAccounts',
-            })
-
-            console.log('✅ Accounts received:', accounts)
-
-            // Create provider and signer
             const provider = new ethers.BrowserProvider(window.ethereum)
-            const signer = await provider.getSigner()
-            const network = await provider.getNetwork()
+            const accounts = await provider.send('eth_requestAccounts', [])
 
-            console.log('✅ Network:', network.chainId.toString())
+            if (accounts.length === 0) {
+                throw new Error('No accounts found')
+            }
+
+            const signer = await provider.getSigner()
+            const address = await signer.getAddress()
+            const network = await provider.getNetwork()
 
             setProvider(provider)
             setSigner(signer)
-            setAccount(accounts[0])
+            setAccount(address)
             setChainId(network.chainId.toString())
 
-            // Check if on Base Sepolia
+            // Check if on correct network
             if (network.chainId.toString() !== '84532') {
-                toast.error('Please switch to Base Sepolia network')
-                await switchToBaseSepolia()
+                await switchNetwork()
             } else {
-                toast.success(`Connected: ${accounts[0].slice(0, 6)}...${accounts[0].slice(-4)}`)
+                toast.success('Wallet connected!')
             }
         } catch (error) {
-            console.error('❌ Error connecting wallet:', error)
-
             if (error.code === 4001) {
-                toast.error('Connection rejected by user')
-            } else if (error.code === -32002) {
-                toast.error('Connection request pending. Please check MetaMask.')
+                toast.error('Connection rejected')
             } else {
                 toast.error('Failed to connect wallet')
             }
@@ -134,51 +111,41 @@ export const WalletProvider = ({ children }) => {
         }
     }
 
-    const switchToBaseSepolia = async () => {
+    const switchNetwork = async () => {
         try {
-            console.log('🔄 Switching to Base Sepolia...')
-
             await window.ethereum.request({
                 method: 'wallet_switchEthereumChain',
                 params: [{ chainId: BASE_SEPOLIA_CHAIN_ID }],
             })
-
             toast.success('Switched to Base Sepolia')
-            window.location.reload()
         } catch (error) {
-            console.error('❌ Switch network error:', error)
-
-            // Chain not added to MetaMask
             if (error.code === 4902) {
-                try {
-                    console.log('➕ Adding Base Sepolia network...')
-
-                    await window.ethereum.request({
-                        method: 'wallet_addEthereumChain',
-                        params: [
-                            {
-                                chainId: BASE_SEPOLIA_CHAIN_ID,
-                                chainName: 'Base Sepolia',
-                                nativeCurrency: {
-                                    name: 'Ethereum',
-                                    symbol: 'ETH',
-                                    decimals: 18,
-                                },
-                                rpcUrls: ['https://sepolia.base.org'],
-                                blockExplorerUrls: ['https://sepolia.basescan.org'],
-                            },
-                        ],
-                    })
-
-                    toast.success('Base Sepolia network added!')
-                    window.location.reload()
-                } catch (addError) {
-                    console.error('❌ Error adding network:', addError)
-                    toast.error('Failed to add Base Sepolia network')
-                }
+                await addNetwork()
             } else {
                 toast.error('Failed to switch network')
             }
+        }
+    }
+
+    const addNetwork = async () => {
+        try {
+            await window.ethereum.request({
+                method: 'wallet_addEthereumChain',
+                params: [{
+                    chainId: BASE_SEPOLIA_CHAIN_ID,
+                    chainName: 'Base Sepolia',
+                    nativeCurrency: {
+                        name: 'Ethereum',
+                        symbol: 'ETH',
+                        decimals: 18
+                    },
+                    rpcUrls: ['https://sepolia.base.org'],
+                    blockExplorerUrls: ['https://sepolia.basescan.org']
+                }]
+            })
+            toast.success('Base Sepolia network added!')
+        } catch (error) {
+            toast.error('Failed to add network')
         }
     }
 
@@ -187,12 +154,11 @@ export const WalletProvider = ({ children }) => {
         setProvider(null)
         setSigner(null)
         setChainId(null)
-        console.log('👋 Wallet disconnected')
         toast.success('Wallet disconnected')
     }
 
-    const isConnected = !!account
     const isCorrectNetwork = chainId === '84532'
+    const isConnected = !!account
 
     return (
         <WalletContext.Provider
@@ -201,12 +167,12 @@ export const WalletProvider = ({ children }) => {
                 provider,
                 signer,
                 chainId,
-                isConnecting,
                 isConnected,
                 isCorrectNetwork,
+                isConnecting,
                 connectWallet,
                 disconnect,
-                switchToBaseSepolia,
+                switchNetwork,
             }}
         >
             {children}

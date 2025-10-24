@@ -15,10 +15,10 @@ const CreateProposal = () => {
     const [selectedTime, setSelectedTime] = useState('10:00')
     const [sponsorFees, setSponsorFees] = useState(true)
     const [jurorCount, setJurorCount] = useState(0)
+    const [gasRefundAmount, setGasRefundAmount] = useState('0.001')
+    const [entropyFee, setEntropyFee] = useState('0.001')
     const [creating, setCreating] = useState(false)
-
-    const PROPOSAL_DEPOSIT = 0.05 // Fixed deposit amount
-    const GAS_PER_VOTE = 0.001 // From contract constant
+    const [loadingFees, setLoadingFees] = useState(true)
 
     const navigate = useNavigate()
     const { account, isConnected, connectWallet } = useWallet()
@@ -27,7 +27,8 @@ const CreateProposal = () => {
 
     useEffect(() => {
         fetchJurorCount()
-    }, [registry])
+        fetchContractFees()
+    }, [registry, governor])
 
     useEffect(() => {
         const defaultDate = new Date()
@@ -37,7 +38,7 @@ const CreateProposal = () => {
 
     useEffect(() => {
         if (jurorCount > 0 && jurySize === 0) {
-            setJurySize(jurorCount)
+            setJurySize(Math.min(jurorCount, 5)) // Default to 5 or max available
         }
     }, [jurorCount])
 
@@ -47,9 +48,33 @@ const CreateProposal = () => {
         try {
             const count = await registry.getJurorCount()
             setJurorCount(Number(count))
-            console.log('✅ Registered jurors:', Number(count))
         } catch (error) {
-            console.error('❌ Error fetching juror count:', error.message)
+            // Silent error
+        }
+    }
+
+    const fetchContractFees = async () => {
+        if (!governor) return
+
+        setLoadingFees(true)
+        try {
+            // Get gas refund amount from contract
+            const gasRefund = await governor.gasRefundAmount()
+            setGasRefundAmount(ethers.formatEther(gasRefund))
+
+            // Get entropy fee from contract (if available)
+            try {
+                const entropy = await governor.getEntropyFee()
+                setEntropyFee(ethers.formatEther(entropy))
+            } catch {
+                setEntropyFee('0.001')
+            }
+        } catch (error) {
+            // Use defaults if fetch fails
+            setGasRefundAmount('0.001')
+            setEntropyFee('0.001')
+        } finally {
+            setLoadingFees(false)
         }
     }
 
@@ -93,19 +118,21 @@ const CreateProposal = () => {
     }
 
     const calculateTotalCost = () => {
-        return PROPOSAL_DEPOSIT.toFixed(2)
+        // Base fee: 0.01 ETH (covers proposal creation + Pyth Entropy)
+        const baseFee = 0.01
+        const gasCost = sponsorFees ? (parseFloat(gasRefundAmount) * jurySize) : 0
+        return (baseFee + gasCost).toFixed(4)
     }
 
     const getFeesBreakdown = () => {
-        const entropyFee = 0.001
-        const gasCost = sponsorFees ? (GAS_PER_VOTE * jurySize) : 0
-        const buffer = PROPOSAL_DEPOSIT - entropyFee - gasCost
+        const baseFee = 0.01
+        const gasCost = sponsorFees ? (parseFloat(gasRefundAmount) * jurySize) : 0
+        const total = baseFee + gasCost
 
         return {
-            entropy: entropyFee,
+            base: baseFee,
             gas: gasCost,
-            buffer: buffer > 0 ? buffer : 0,
-            total: PROPOSAL_DEPOSIT
+            total
         }
     }
 
@@ -132,6 +159,11 @@ const CreateProposal = () => {
             return
         }
 
+        if (jurySize < 1) {
+            toast.error('Jury size must be at least 1')
+            return
+        }
+
         if (!selectedDate || !selectedTime) {
             toast.error('Please select a deadline date and time')
             return
@@ -145,66 +177,63 @@ const CreateProposal = () => {
             return
         }
 
+        const votingPeriodSeconds = deadlineTimestamp - now
+
+        // Check voting period constraints (from contract)
+        const MIN_PERIOD = 1 * 60 * 60 // 1 hour
+        const MAX_PERIOD = 30 * 24 * 60 * 60 // 30 days
+
+        if (votingPeriodSeconds < MIN_PERIOD) {
+            toast.error('Voting period must be at least 1 hour')
+            return
+        }
+
+        if (votingPeriodSeconds > MAX_PERIOD) {
+            toast.error('Voting period must be less than 30 days')
+            return
+        }
+
         setCreating(true)
 
         try {
-            const votingPeriodSeconds = deadlineTimestamp - now
-
-            // Always send 0.05 ETH
-            const value = ethers.parseEther(PROPOSAL_DEPOSIT.toString())
-
-            console.log('📝 Creating proposal...')
-            console.log('Title:', title)
-            console.log('Description:', description)
-            console.log('Jury Size:', jurySize)
-            console.log('Voting Period:', votingPeriodSeconds, 'seconds')
-            console.log('Sponsor Fees:', sponsorFees)
-            console.log('Deposit sent:', PROPOSAL_DEPOSIT, 'ETH')
+            // Calculate required ETH: 0.01 base + gas sponsorship
+            const requiredAmount = calculateTotalCost()
+            const value = ethers.parseEther(requiredAmount)
 
             toast.loading('Creating proposal...', { id: 'create' })
 
-            // Call createProposal with correct parameters
             const tx = await governor.createProposal(
-                title,                    // string _title
-                description,              // string _description
-                jurySize,                 // uint256 _jurySize
-                votingPeriodSeconds,      // uint256 _votingPeriodSeconds
-                sponsorFees,              // bool _sponsorFees
+                title,
+                description,
+                jurySize,
+                votingPeriodSeconds,
+                sponsorFees,
                 {
-                    value,
+                    value, // Send ETH with transaction
                     gasLimit: 500000
                 }
             )
 
-            console.log('⏳ Transaction sent:', tx.hash)
-
-            const receipt = await tx.wait()
-            console.log('✅ Transaction confirmed:', receipt)
+            await tx.wait()
 
             toast.success('Proposal created successfully!', { id: 'create' })
 
             setTimeout(() => navigate('/dashboard'), 2000)
         } catch (error) {
-            console.error('❌ Create proposal error:', error)
-
             let errorMsg = 'Failed to create proposal'
 
             if (error.code === 'ACTION_REJECTED') {
                 errorMsg = 'Transaction rejected'
-            } else if (error.message.includes('Jury size exceeds')) {
+            } else if (error.message?.includes('Jury size exceeds')) {
                 errorMsg = `Only ${jurorCount} jurors available`
-            } else if (error.message.includes('Voting period too short')) {
+            } else if (error.message?.includes('Voting period too short')) {
                 errorMsg = 'Voting period must be at least 1 hour'
-            } else if (error.message.includes('Voting period too long')) {
+            } else if (error.message?.includes('Voting period too long')) {
                 errorMsg = 'Voting period must be less than 30 days'
-            } else if (error.message.includes('Insufficient gas fees')) {
-                errorMsg = 'Need more ETH. Contract requires entropy + gas fees'
-            } else if (error.message.includes('Insufficient entropy fee')) {
-                errorMsg = 'Contract needs more ETH for Pyth Entropy'
+            } else if (error.message?.includes('Insufficient') || error.message?.includes('insufficient funds')) {
+                errorMsg = `Insufficient ETH. Need ${calculateTotalCost()} ETH`
             } else if (error.reason) {
                 errorMsg = error.reason
-            } else if (error.message) {
-                errorMsg = error.message.substring(0, 100)
             }
 
             toast.error(errorMsg, { id: 'create' })
@@ -307,8 +336,10 @@ const CreateProposal = () => {
                                     onChange={(e) => setTitle(e.target.value)}
                                     placeholder="e.g. Upgrade Smart Contract to v2.0"
                                     className="input"
+                                    maxLength={100}
                                     required
                                 />
+                                <p className="text-xs text-gray-500 mt-1">{title.length}/100 characters</p>
                             </div>
 
                             {/* Description */}
@@ -320,8 +351,10 @@ const CreateProposal = () => {
                                     placeholder="Provide detailed information about your proposal..."
                                     rows={8}
                                     className="input resize-none"
+                                    maxLength={1000}
                                     required
                                 />
+                                <p className="text-xs text-gray-500 mt-1">{description.length}/1000 characters</p>
                             </div>
                         </div>
 
@@ -341,7 +374,7 @@ const CreateProposal = () => {
                                     <span className="text-2xl font-bold text-blue-400">{jurySize}</span>
                                 </label>
                                 <p className="text-xs text-gray-400 mb-3">
-                                    {jurorCount} jurors available (defaulted to maximum)
+                                    {jurorCount} jurors available
                                 </p>
                                 <input
                                     type="range"
@@ -350,6 +383,7 @@ const CreateProposal = () => {
                                     min="1"
                                     max={jurorCount || 1}
                                     className="w-full h-2 bg-gray-700 rounded-lg appearance-none cursor-pointer accent-blue-500"
+                                    disabled={jurorCount === 0}
                                 />
                                 <div className="flex justify-between text-xs text-gray-500 mt-2">
                                     <span>1</span>
@@ -372,6 +406,7 @@ const CreateProposal = () => {
                                             type="date"
                                             value={selectedDate}
                                             onChange={(e) => setSelectedDate(e.target.value)}
+                                            min={new Date().toISOString().split('T')[0]}
                                             className="input cursor-pointer"
                                             required
                                         />
@@ -441,7 +476,7 @@ const CreateProposal = () => {
 
                             <p className="text-xs text-gray-400 p-3 rounded-lg bg-gray-900/50">
                                 {sponsorFees
-                                    ? `~0.001 ETH per juror vote (${jurySize} jurors)`
+                                    ? `~${gasRefundAmount} ETH per juror (${jurySize} jurors)`
                                     : 'Jurors pay their own gas fees'
                                 }
                             </p>
@@ -453,42 +488,45 @@ const CreateProposal = () => {
                                 <div className="p-2 rounded-lg bg-blue-500/20">
                                     <DollarSign size={20} className="text-blue-400" />
                                 </div>
-                                <h2 className="text-lg font-bold">Required Deposit</h2>
+                                <h2 className="text-lg font-bold">Required Payment</h2>
                             </div>
 
-                            <div className="space-y-3 mb-4">
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-400">Entropy Fee:</span>
-                                    <span className="font-semibold">~{fees.entropy.toFixed(3)} ETH</span>
+                            {loadingFees ? (
+                                <div className="flex items-center justify-center py-4">
+                                    <div className="spinner"></div>
                                 </div>
+                            ) : (
+                                <>
+                                    <div className="space-y-3 mb-4">
+                                        <div className="flex justify-between text-sm">
+                                            <span className="text-gray-400">Base + Entropy Fee:</span>
+                                            <span className="font-semibold">{fees.base.toFixed(4)} ETH</span>
+                                        </div>
 
-                                {sponsorFees && (
-                                    <div className="flex justify-between text-sm">
-                                        <span className="text-gray-400">
-                                            Gas ({jurySize} juror{jurySize > 1 ? 's' : ''}):
-                                        </span>
-                                        <span className="font-semibold">~{fees.gas.toFixed(3)} ETH</span>
+                                        {sponsorFees && (
+                                            <div className="flex justify-between text-sm">
+                                                <span className="text-gray-400">
+                                                    Gas Refunds ({jurySize}):
+                                                </span>
+                                                <span className="font-semibold">{fees.gas.toFixed(4)} ETH</span>
+                                            </div>
+                                        )}
+
+                                        <div className="pt-3 border-t border-gray-700/50">
+                                            <div className="flex justify-between items-center">
+                                                <span className="text-blue-400 font-bold">Total:</span>
+                                                <span className="text-blue-400 font-bold text-2xl">
+                                                    {fees.total.toFixed(4)} ETH
+                                                </span>
+                                            </div>
+                                        </div>
                                     </div>
-                                )}
 
-                                <div className="flex justify-between text-sm">
-                                    <span className="text-gray-400">Buffer/Reserve:</span>
-                                    <span className="font-semibold">~{fees.buffer.toFixed(3)} ETH</span>
-                                </div>
-
-                                <div className="pt-3 border-t border-gray-700/50">
-                                    <div className="flex justify-between items-center">
-                                        <span className="text-blue-400 font-bold">Total Deposit:</span>
-                                        <span className="text-blue-400 font-bold text-2xl">
-                                            {fees.total.toFixed(2)} ETH
-                                        </span>
-                                    </div>
-                                </div>
-                            </div>
-
-                            <p className="text-xs text-gray-400 p-3 rounded-lg bg-gray-900/50">
-                                Fixed 0.05 ETH deposit. Unused ETH stays in contract for future proposals.
-                            </p>
+                                    <p className="text-xs text-gray-400 p-3 rounded-lg bg-gray-900/50">
+                                        Required payment includes proposal creation and Pyth Entropy fees. Unspent gas refunds can be withdrawn by contract owner.
+                                    </p>
+                                </>
+                            )}
                         </div>
 
                         {/* Info Card */}
@@ -496,7 +534,7 @@ const CreateProposal = () => {
                             <div className="flex gap-3">
                                 <CheckCircle2 className="text-purple-400 flex-shrink-0 mt-0.5" size={20} />
                                 <div className="text-sm text-gray-400">
-                                    <span className="text-purple-400 font-semibold">Random Selection:</span> Jurors will be randomly selected using Pyth Entropy within 1-2 minutes.
+                                    <span className="text-purple-400 font-semibold">Random Selection:</span> Jurors will be randomly selected using Pyth Entropy within 1-2 minutes after proposal creation.
                                 </div>
                             </div>
                         </div>
@@ -504,7 +542,7 @@ const CreateProposal = () => {
                         {/* Submit Button */}
                         <button
                             type="submit"
-                            disabled={creating || jurorCount === 0}
+                            disabled={creating || jurorCount === 0 || loadingFees}
                             className="btn btn-primary w-full py-4 text-lg"
                         >
                             {creating ? (

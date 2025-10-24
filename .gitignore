@@ -16,6 +16,7 @@ broadcast/
 cache/
 out/
 node_modules/
+.env.backup
 
 
 # Editor directories and files

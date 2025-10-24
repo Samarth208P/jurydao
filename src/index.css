@@ -483,3 +483,29 @@ body::before {
     transform: scale(1.2);
     box-shadow: 0 0 20px rgba(59, 130, 246, 0.8);
 }
+
+/* ===== GRADIENT SHIFT ANIMATION ===== */
+@keyframes gradient-shift {
+    0% {
+        background-position: 0% 50%;
+    }
+    50% {
+        background-position: 100% 50%;
+    }
+    100% {
+        background-position: 0% 50%;
+    }
+}
+
+/* ===== ENHANCED GLOW ===== */
+@keyframes glow-pulse {
+    0%, 100% {
+        opacity: 0.3;
+        transform: scale(1);
+    }
+    50% {
+        opacity: 0.6;
+        transform: scale(1.1);
+    }
+}
+

@@ -1,5 +1,5 @@
 import { ethers } from 'ethers'
-import { PROPOSAL_STATE_LABELS } from './constants'
+import { STATE_LABELS } from './constants'
 
 // Format address
 export const formatAddress = (address) => {
@@ -38,17 +38,17 @@ export const parseEther = (value) => {
 
 // Get proposal state label
 export const getProposalStateLabel = (state) => {
-    return PROPOSAL_STATE_LABELS[state] || 'Unknown'
+    return STATE_LABELS[state] || 'Unknown'
 }
 
 // Get proposal state color
 export const getProposalStateColor = (state) => {
-    switch (state) {
-        case 0: return 'text-yellow-400'  // Pending
-        case 1: return 'text-blue-400'    // Active
-        case 2: return 'text-green-400'   // Completed
-        case 3: return 'text-purple-400'  // Executed
-        case 4: return 'text-red-400'     // Defeated
-        default: return 'text-gray-400'
+    const colors = {
+        0: 'text-yellow-400',
+        1: 'text-blue-400',
+        2: 'text-red-400',
+        3: 'text-green-400',
+        4: 'text-purple-400',
     }
+    return colors[state] || 'text-gray-400'
 }

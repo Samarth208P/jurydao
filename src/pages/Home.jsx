@@ -30,11 +30,17 @@ const Home = () => {
             let active = 0
             let votes = 0
 
+            // Fetch proposal details to count active proposals and total votes
             for (let i = 0; i < total; i++) {
-                const proposal = await governor.getProposal(i)
-                const state = proposal[6]
-                if (state === 1) active++
-                votes += Number(proposal[3]) + Number(proposal[4])
+                try {
+                    const proposal = await governor.getProposal(i)
+                    const state = Number(proposal[6])
+
+                    if (state === 1) active++
+                    votes += Number(proposal[3]) + Number(proposal[4])
+                } catch (error) {
+                    // Skip proposals that fail to load
+                }
             }
 
             const jurorCount = await registry.getJurorCount()
@@ -45,10 +51,8 @@ const Home = () => {
                 registeredJurors: Number(jurorCount),
                 totalVotes: votes,
             })
-
-            console.log('✅ Stats loaded:', { total, active, jurors: Number(jurorCount), votes })
         } catch (error) {
-            console.error('Error fetching stats:', error.message)
+            // Silent error handling
         } finally {
             setLoading(false)
         }
@@ -56,6 +60,7 @@ const Home = () => {
 
     return (
         <div className="min-h-screen">
+
             {/* Hero Section */}
             <section className="relative py-20 px-4 overflow-hidden">
                 {/* Background gradient */}
@@ -80,36 +85,89 @@ const Home = () => {
                                     src="/favicon.png"
                                     alt="JuryDAO Logo"
                                     className="w-32 h-32 object-contain"
-                                    animate={{ rotate: [0, 5, -5, 0] }}
-                                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                                    animate={{
+                                        rotate: [0, 5, -5, 0],
+                                        y: [0, -10, 0]
+                                    }}
+                                    transition={{
+                                        duration: 4,
+                                        repeat: Infinity,
+                                        ease: 'easeInOut'
+                                    }}
                                 />
                                 {/* Glow effect */}
-                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-pink-500/30 blur-3xl rounded-full" />
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-pink-500/30 blur-3xl rounded-full animate-pulse" />
                             </div>
                         </motion.div>
 
-                        <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
-                            JuryDAO
-                        </h1>
-                        <p className="text-xl md:text-2xl text-gray-300 mb-8">
-                            Decentralized Governance Through Random Jury Selection
-                        </p>
-                        <p className="text-gray-400 mb-12 max-w-2xl mx-auto">
-                            Powered by Pyth Entropy for verifiable randomness, ensuring fair and transparent jury selection for every proposal
-                        </p>
+                        {/* Main Title with Multiple Effects */}
+                        <motion.h1
+                            className="text-5xl md:text-7xl font-bold mb-6 relative"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 0.2 }}
+                        >
+                            {/* Animated gradient background */}
+                            <span className="relative inline-block">
+                    <span className="absolute inset-0 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent animate-pulse blur-sm">
+                        JuryDAO
+                    </span>
+                    <span
+                        className="relative bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent"
+                        style={{
+                            backgroundSize: '200% 200%',
+                            animation: 'gradient-shift 3s ease infinite'
+                        }}
+                    >
+                        JuryDAO
+                    </span>
+                </span>
+                        </motion.h1>
 
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                            <Link to="/create-proposal" className="btn btn-primary">
+                        {/* Subtitle with fade-in */}
+                        <motion.p
+                            className="text-xl md:text-2xl text-gray-300 mb-8"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.8, delay: 0.4 }}
+                        >
+                <span className="font-semibold bg-gradient-to-r from-blue-400 to-purple-500 bg-clip-text text-transparent">
+                    Decentralized Governance
+                </span>
+                            {' '}Through Random Jury Selection
+                        </motion.p>
+
+                        {/* Description */}
+                        <motion.p
+                            className="text-gray-400 mb-12 max-w-2xl mx-auto"
+                            initial={{ opacity: 0 }}
+                            animate={{ opacity: 1 }}
+                            transition={{ duration: 0.8, delay: 0.6 }}
+                        >
+                            Powered by{' '}
+                            <span className="text-purple-400 font-semibold">Pyth Entropy</span>
+                            {' '}for verifiable randomness, ensuring fair and transparent jury selection for every proposal
+                        </motion.p>
+
+                        {/* Buttons */}
+                        <motion.div
+                            className="flex flex-col sm:flex-row gap-4 justify-center"
+                            initial={{ opacity: 0, y: 20 }}
+                            animate={{ opacity: 1, y: 0 }}
+                            transition={{ duration: 0.8, delay: 0.8 }}
+                        >
+                            <Link to="/create" className="btn btn-primary group">
                                 Create Proposal
-                                <ArrowRight className="ml-2" size={20} />
+                                <ArrowRight className="ml-2 group-hover:translate-x-1 transition-transform" size={20} />
                             </Link>
                             <Link to="/dashboard" className="btn btn-secondary">
                                 View Proposals
                             </Link>
-                        </div>
+                        </motion.div>
                     </motion.div>
                 </div>
             </section>
+
 
             {/* Stats Section */}
             <section className="py-16 px-4 bg-gray-800/30">

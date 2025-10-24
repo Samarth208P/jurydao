@@ -32,15 +32,12 @@ const Dashboard = () => {
         if (!governor) return
 
         try {
-            console.log('📥 Fetching proposals...')
-
             const count = await governor.proposalCount()
             const proposalCount = Number(count)
 
-            console.log('Total proposals:', proposalCount)
-
             if (proposalCount === 0) {
                 setProposals([])
+                setStats({ total: 0, active: 0, succeeded: 0, defeated: 0 })
                 setLoading(false)
                 return
             }
@@ -54,52 +51,49 @@ const Dashboard = () => {
                 try {
                     const data = await governor.getProposal(i)
 
+                    // Contract returns: [title, description, proposer, forVotes, againstVotes, deadline, state, jurySize]
                     const proposal = {
                         id: i,
-                        title: data[0] || '',
-                        description: data[1] || '',
-                        proposer: data[2] || '',
-                        forVotes: data[3] || 0n,
-                        againstVotes: data[4] || 0n,
-                        deadline: data[5] || 0n,
-                        state: data[6] || 0,
-                        jurySize: data[7] || 0n,
-                        feesSponsoredByProposer: data[8] || false,
-                        gasPerVote: data[9] || 0n,
+                        title: data[0],
+                        description: data[1],
+                        proposer: data[2],
+                        forVotes: Number(data[3]),
+                        againstVotes: Number(data[4]),
+                        deadline: Number(data[5]),
+                        state: Number(data[6]),
+                        jurySize: Number(data[7]),
                     }
 
                     proposalsArray.push(proposal)
 
-                    if (Number(proposal.state) === 1) activeCount++
-                    if (Number(proposal.state) === 3) succeededCount++
-                    if (Number(proposal.state) === 2) defeatedCount++
+                    // Count by state
+                    if (proposal.state === 1) activeCount++
+                    if (proposal.state === 3) succeededCount++
+                    if (proposal.state === 2) defeatedCount++
                 } catch (error) {
-                    console.error(`Error fetching proposal ${i}:`, error)
+                    // Skip proposals that fail to load
                 }
             }
 
-            setProposals(proposalsArray.reverse())
+            setProposals(proposalsArray.reverse()) // Show newest first
             setStats({
                 total: proposalCount,
                 active: activeCount,
                 succeeded: succeededCount,
                 defeated: defeatedCount
             })
-
-            console.log('✅ Loaded', proposalsArray.length, 'proposals')
         } catch (error) {
-            console.error('Error fetching proposals:', error)
+            // Silent error handling
         } finally {
             setLoading(false)
         }
     }
 
     const filteredProposals = proposals.filter(p => {
-        const state = Number(p.state)
         if (filter === 'all') return true
-        if (filter === 'active') return state === 1
-        if (filter === 'succeeded') return state === 3
-        if (filter === 'defeated') return state === 2
+        if (filter === 'active') return p.state === 1
+        if (filter === 'succeeded') return p.state === 3
+        if (filter === 'defeated') return p.state === 2
         return true
     })
 
@@ -113,7 +107,7 @@ const Dashboard = () => {
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center bg-gray-900">
-                <LoadingSpinner size="lg" text="Loading proposals..." />
+                <LoadingSpinner size="lg" />
             </div>
         )
     }
@@ -136,7 +130,7 @@ const Dashboard = () => {
                         </p>
                     </div>
                     <button
-                        onClick={() => navigate('/create-proposal')}
+                        onClick={() => navigate('/create')}
                         className="mt-4 md:mt-0 flex items-center gap-2 px-6 py-3 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white rounded-lg font-semibold transition-all shadow-lg hover:shadow-xl hover:-translate-y-0.5"
                     >
                         <Plus size={20} />
@@ -159,7 +153,6 @@ const Dashboard = () => {
                         value={stats.active}
                         color="purple"
                         index={1}
-                        subtitle="Open for voting"
                     />
                     <StatCard
                         icon={CheckCircle}
@@ -203,17 +196,10 @@ const Dashboard = () => {
                 {filteredProposals.length === 0 ? (
                     <EmptyState
                         icon={FileText}
-                        title={filter === 'all' ? 'No proposals yet' : `No ${filter} proposals`}
-                        description={
+                        message={
                             filter === 'all'
-                                ? 'Be the first to create a proposal!'
-                                : `There are no ${filter} proposals at the moment.`
-                        }
-                        action={
-                            filter === 'all' && {
-                                label: 'Create First Proposal',
-                                onClick: () => navigate('/create-proposal')
-                            }
+                                ? 'No proposals yet. Be the first to create one!'
+                                : `No ${filter} proposals at the moment.`
                         }
                     />
                 ) : (

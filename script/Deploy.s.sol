@@ -13,10 +13,12 @@ contract DeployScript is Script {
         address pythEntropy = vm.envAddress("PYTH_ENTROPY");
         address pythProvider = vm.envAddress("PYTH_PROVIDER");
 
+        // Start broadcasting transactions
         vm.startBroadcast(deployerPrivateKey);
 
         // 1. Deploy Governance Token
         GovernanceToken token = new GovernanceToken();
+        console.log("========================================");
         console.log("GovernanceToken deployed at:", address(token));
 
         // 2. Deploy Juror Registry
@@ -30,14 +32,14 @@ contract DeployScript is Script {
             address(registry)
         );
         console.log("GovernorSortition deployed at:", address(governor));
+        console.log("========================================");
 
         vm.stopBroadcast();
 
-        // Save addresses to file
-        string memory output = string.concat(
-            "VITE_GOVERNANCE_TOKEN=", vm.toString(address(token)), "\n",
-            "VITE_JUROR_REGISTRY=", vm.toString(address(registry)), "\n",
-            "VITE_GOVERNOR=", vm.toString(address(governor)), "\n"
-        );
+        // Print .env format
+        console.log("\nAdd these to your .env file:");
+        console.log("VITE_GOVERNANCE_TOKEN=%s", address(token));
+        console.log("VITE_JUROR_REGISTRY=%s", address(registry));
+        console.log("VITE_GOVERNOR=%s", address(governor));
     }
 }

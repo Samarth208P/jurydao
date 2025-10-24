@@ -12,10 +12,10 @@ const ExplorerLink = ({ type, value, children, className = '', chainId }) => {
             href={link}
             target="_blank"
             rel="noopener noreferrer"
-            className={`inline-flex items-center gap-1 text-accent-blue hover:text-accent-purple transition-colors ${className}`}
+            className={`inline-flex items-center gap-1 text-blue-400 hover:text-blue-300 transition-colors ${className}`}
         >
             {children}
-            <ExternalLink size={14} />
+            <ExternalLink className="w-3 h-3" />
         </a>
     )
 }
