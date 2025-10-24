@@ -1,41 +1,40 @@
 import React, { useState, useEffect } from 'react'
 import { useContract } from '../hooks/useContract'
 import { useWallet } from '../context/WalletContext'
-import { Shield, CheckCircle, XCircle, Coins, TrendingUp } from 'lucide-react'
-import { formatBalance } from '../utils/format'
-import { MIN_STAKE } from '../utils/constants'
+import { Shield, CheckCircle, XCircle, Coins } from 'lucide-react'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
 import StatCard from '../components/StatCard'
 
+const MINSTAKE = 100 // Minimum stake in DGOV tokens
+
 const JurorPage = () => {
     const [isJuror, setIsJuror] = useState(false)
     const [balance, setBalance] = useState('0')
-    const [stakedAmount, setStakedAmount] = useState('0')
-    const [stakeAmount, setStakeAmount] = useState(MIN_STAKE.toString())
+    const [stakeAmount, setStakeAmount] = useState(MINSTAKE.toString())
     const [loading, setLoading] = useState(true)
     const [registering, setRegistering] = useState(false)
     const [approving, setApproving] = useState(false)
 
     const { account, isConnected, connectWallet } = useWallet()
-    const token = useContract('token')
-    const registry = useContract('registry')
+    const token = useContract('governanceToken')  // ✅ FIXED
+    const registry = useContract('jurorRegistry')  // ✅ FIXED
 
     useEffect(() => {
-        if (account && registry && token) {
+        if (account) {
             checkJurorStatus()
             fetchBalance()
-            fetchStakedAmount()
         }
     }, [account, registry, token])
 
     const checkJurorStatus = async () => {
         if (!registry || !account) return
+
         try {
             const status = await registry.isJuror(account)
             setIsJuror(status)
-            console.log('🔍 Juror status:', status)
+            console.log('Juror status:', status)
         } catch (error) {
             console.error('Check juror status error:', error.message)
         } finally {
@@ -45,26 +44,13 @@ const JurorPage = () => {
 
     const fetchBalance = async () => {
         if (!token || !account) return
+
         try {
             const bal = await token.balanceOf(account)
-            setBalance(formatBalance(bal))
-            console.log('💰 DGOV balance:', formatBalance(bal))
+            setBalance(ethers.formatEther(bal))
+            console.log('DGOV balance:', ethers.formatEther(bal))
         } catch (error) {
             console.error('Fetch balance error:', error.message)
-        }
-    }
-
-    const fetchStakedAmount = async () => {
-        if (!registry || !account) return
-        try {
-            // Use the new getStake function
-            const stake = await registry.getStake(account)
-            const formatted = formatBalance(stake)
-            setStakedAmount(formatted)
-            console.log('🔒 Staked amount:', formatted, 'DGOV')
-        } catch (error) {
-            console.error('Fetch staked amount error:', error.message)
-            setStakedAmount('0')
         }
     }
 
@@ -72,16 +58,17 @@ const JurorPage = () => {
         if (!token || !registry) return
 
         setApproving(true)
+
         try {
             const amount = ethers.parseEther(stakeAmount)
-            console.log('✅ Approving tokens...')
+            console.log('Approving tokens...')
 
             const tx = await token.approve(await registry.getAddress(), amount)
             toast.loading('Approving tokens...', { id: 'approve' })
             await tx.wait()
 
             toast.success('Tokens approved!', { id: 'approve' })
-            console.log('✅ Approval successful')
+            console.log('Approval successful')
         } catch (error) {
             console.error('Approve error:', error)
             toast.error('Approval failed', { id: 'approve' })
@@ -94,19 +81,19 @@ const JurorPage = () => {
         if (!registry) return
 
         setRegistering(true)
+
         try {
             const amount = ethers.parseEther(stakeAmount)
-            console.log('📝 Registering as juror...')
+            console.log('Registering as juror...')
 
             const tx = await registry.registerJuror(amount)
             toast.loading('Registering as juror...', { id: 'register' })
             await tx.wait()
 
             toast.success('Successfully registered as juror!', { id: 'register' })
-            console.log('✅ Registration successful')
+            console.log('Registration successful')
             setIsJuror(true)
             fetchBalance()
-            fetchStakedAmount()
         } catch (error) {
             console.error('Register error:', error)
             toast.error('Registration failed', { id: 'register' })
@@ -137,10 +124,7 @@ const JurorPage = () => {
     return (
         <div className="min-h-screen py-8">
             <div className="container mx-auto px-4 max-w-4xl">
-                <motion.div
-                    initial={{ opacity: 0, y: 20 }}
-                    animate={{ opacity: 1, y: 0 }}
-                >
+                <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
                     <h1 className="text-4xl font-bold mb-2">Become a Juror</h1>
                     <p className="text-gray-400 mb-8">
                         Stake tokens to participate in governance and earn rewards
@@ -156,18 +140,16 @@ const JurorPage = () => {
                             index={0}
                         />
                         <StatCard
-                            icon={TrendingUp}
-                            label={isJuror ? "Your Staked Amount" : "Wallet Balance"}
-                            value={isJuror ? `${stakedAmount} DGOV` : `${balance} DGOV`}
-                            subtitle={isJuror ? `Min: ${MIN_STAKE} DGOV` : 'Available to stake'}
+                            icon={Coins}
+                            label="DGOV Balance"
+                            value={balance}
                             color="blue"
                             index={1}
                         />
                         <StatCard
-                            icon={Coins}
-                            label={isJuror ? "Wallet Balance" : "Minimum Stake"}
-                            value={isJuror ? `${balance} DGOV` : `${MIN_STAKE} DGOV`}
-                            subtitle={isJuror ? 'Available funds' : 'Required to register'}
+                            icon={Shield}
+                            label="Minimum Stake"
+                            value={`${MINSTAKE} DGOV`}
                             color="purple"
                             index={2}
                         />
@@ -186,9 +168,9 @@ const JurorPage = () => {
                                     type="number"
                                     value={stakeAmount}
                                     onChange={(e) => setStakeAmount(e.target.value)}
-                                    min={MIN_STAKE}
+                                    min={MINSTAKE}
                                     className="input"
-                                    placeholder={`Minimum ${MIN_STAKE} DGOV`}
+                                    placeholder={`Minimum ${MINSTAKE} DGOV`}
                                 />
                                 <p className="text-sm text-gray-400 mt-2">
                                     You currently have {balance} DGOV tokens
@@ -197,7 +179,7 @@ const JurorPage = () => {
 
                             {/* Info */}
                             <div className="card bg-blue-500/5 border-blue-500/20 mb-6">
-                                <h3 className="font-semibold text-blue-400 mb-2">How it works:</h3>
+                                <h3 className="font-semibold text-blue-400 mb-2">How it works</h3>
                                 <ul className="text-sm text-gray-400 space-y-1">
                                     <li>• Approve DGOV tokens for the registry contract</li>
                                     <li>• Register with your desired stake amount</li>
@@ -210,7 +192,7 @@ const JurorPage = () => {
                             <div className="flex flex-col sm:flex-row gap-3">
                                 <button
                                     onClick={handleApprove}
-                                    disabled={approving || parseFloat(balance) < MIN_STAKE}
+                                    disabled={approving || parseFloat(balance) < MINSTAKE}
                                     className="btn btn-secondary flex-1"
                                 >
                                     {approving ? (
@@ -224,7 +206,7 @@ const JurorPage = () => {
                                 </button>
                                 <button
                                     onClick={handleRegister}
-                                    disabled={registering || parseFloat(balance) < MIN_STAKE}
+                                    disabled={registering || parseFloat(balance) < MINSTAKE}
                                     className="btn btn-primary flex-1"
                                 >
                                     {registering ? (
@@ -242,11 +224,9 @@ const JurorPage = () => {
                         <div className="card text-center p-12 bg-gradient-to-br from-green-500/5 to-blue-500/5 border-green-500/20">
                             <CheckCircle size={64} className="mx-auto mb-4 text-green-500" />
                             <h2 className="text-3xl font-bold mb-4">You're a Juror!</h2>
-                            <p className="text-gray-400 mb-2 max-w-md mx-auto">
-                                You're now eligible to be randomly selected for proposal juries.
-                            </p>
-                            <p className="text-lg font-semibold text-accent-blue mb-8">
-                                Your stake: {stakedAmount} DGOV
+                            <p className="text-gray-400 mb-8 max-w-md mx-auto">
+                                You're now eligible to be randomly selected for proposal juries. Check your dashboard
+                                for active proposals.
                             </p>
                             <a href="/dashboard" className="btn btn-primary">
                                 View Proposals

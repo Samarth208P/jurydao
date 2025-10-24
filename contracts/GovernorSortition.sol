@@ -22,6 +22,8 @@ contract GovernorSortition is IEntropyConsumer {
         uint64 deadline;
         State state;
         uint256 jurySize;
+        bool feesSponsoredByProposer;
+        uint256 gasPerVote; // Gas fees allocated per juror
     }
 
     IEntropy public entropy;
@@ -30,113 +32,142 @@ contract GovernorSortition is IEntropyConsumer {
     address public owner;
 
     uint256 public proposalCount;
-    uint256 public constant VOTING_PERIOD = 7 days;
+    uint256 public constant MIN_VOTING_PERIOD = 1 hours;
+    uint256 public constant MAX_VOTING_PERIOD = 30 days;
+    uint256 public constant GAS_PER_VOTE = 0.001 ether; // Estimated gas cost per vote
 
     mapping(uint256 => Proposal) public proposals;
     mapping(uint256 => address[]) public jurors;
     mapping(uint256 => mapping(address => bool)) public hasVoted;
-    mapping(uint64 => uint256) public seqToId;
+    mapping(uint64 => uint256) public sequenceToProposal;
 
-    event Created(uint256 indexed id, string title, uint64 seq);
-    event Selected(uint256 indexed id, uint256 jurySize);
-    event Voted(uint256 indexed id, address indexed voter, bool support);
-    event Executed(uint256 indexed id, State result);
-    event Withdrawn(address indexed to, uint256 amount);
+    event ProposalCreated(
+        uint256 indexed proposalId,
+        address indexed proposer,
+        string title,
+        uint256 jurySize,
+        uint256 deadline,
+        bool feesSponsoredByProposer,
+        uint256 totalFeesDeposited
+    );
+    event JurorsSelected(uint256 indexed proposalId, address[] jurors);
+    event Voted(uint256 indexed proposalId, address indexed voter, bool support);
+    event Executed(uint256 indexed proposalId, State finalState);
+    event GasRefunded(uint256 indexed proposalId, address indexed juror, uint256 amount);
 
-    modifier onlyOwner() {
-        require(msg.sender == owner, "Not owner");
-        _;
-    }
-
-    // ✅ FIXED: Added "payable" to constructor
-    constructor(address _entropy, address _provider, address _registry) payable {
+    constructor(address _entropy, address _entropyProvider, address _registry) payable {
         entropy = IEntropy(_entropy);
-        entropyProvider = _provider;
+        entropyProvider = _entropyProvider;
         registry = IJurorRegistry(_registry);
         owner = msg.sender;
     }
 
-    function propose(string memory title, string memory description, uint256 jurySize)
-    external payable returns (uint256) {
+    function createProposal(
+        string memory _title,
+        string memory _description,
+        uint256 _jurySize,
+        uint256 _votingPeriodSeconds,
+        bool _sponsorFees
+    ) external payable returns (uint256) {
+        require(bytes(_title).length > 0, "Title required");
+        require(bytes(_description).length > 0, "Description required");
+        require(_jurySize > 0, "Jury size must be > 0");
+        require(_jurySize <= registry.getJurorCount(), "Jury size exceeds available jurors");
+        require(_votingPeriodSeconds >= MIN_VOTING_PERIOD, "Voting period too short");
+        require(_votingPeriodSeconds <= MAX_VOTING_PERIOD, "Voting period too long");
 
-        uint256 jurorCount = registry.getJurorCount();
-        require(jurorCount > 0, "No jurors registered");
+        uint256 totalGasCost = _jurySize * GAS_PER_VOTE;
 
-        // Auto-adjust jury size
-        if (jurySize > jurorCount) {
-            jurySize = jurorCount;
+        if (_sponsorFees) {
+            require(msg.value >= totalGasCost, "Insufficient gas fees sent");
         }
-        if (jurySize == 0) {
-            jurySize = 1;
-        }
 
-        uint256 id = proposalCount++;
+        uint256 proposalId = proposalCount++;
+        uint64 deadline = uint64(block.timestamp + _votingPeriodSeconds);
 
-        proposals[id] = Proposal({
-            title: title,
-            description: description,
+        proposals[proposalId] = Proposal({
+            title: _title,
+            description: _description,
             proposer: msg.sender,
             forVotes: 0,
             againstVotes: 0,
-            deadline: 0,
+            deadline: deadline,
             state: State.Pending,
-            jurySize: jurySize
+            jurySize: _jurySize,
+            feesSponsoredByProposer: _sponsorFees,
+            gasPerVote: GAS_PER_VOTE
         });
 
-        // Get Pyth Entropy fee and require exact payment
-        uint256 fee = entropy.getFee(entropyProvider);
-        require(msg.value >= fee, "Insufficient fee for randomness");
-
-        // Request randomness - fee is paid from msg.value
-        uint64 seq = entropy.requestWithCallback{value: fee}(
-            entropyProvider,
-            keccak256(abi.encodePacked(id, block.timestamp))
+        emit ProposalCreated(
+            proposalId,
+            msg.sender,
+            _title,
+            _jurySize,
+            deadline,
+            _sponsorFees,
+            msg.value
         );
 
-        seqToId[seq] = id;
-        emit Created(id, title, seq);
+        // Request randomness from Pyth Entropy
+        uint256 fee = entropy.getFee(entropyProvider);
+        require(address(this).balance >= fee, "Insufficient entropy fee");
 
-        // Refund excess payment
-        if (msg.value > fee) {
-            payable(msg.sender).transfer(msg.value - fee);
-        }
+        bytes32 userRandomNumber = keccak256(abi.encodePacked(
+            block.timestamp,
+            msg.sender,
+            proposalId
+        ));
 
-        return id;
+        uint64 sequenceNumber = entropy.requestWithCallback{value: fee}(
+            entropyProvider,
+            userRandomNumber
+        );
+
+        sequenceToProposal[sequenceNumber] = proposalId;
+
+        return proposalId;
     }
 
     function entropyCallback(
-        uint64 seq,
+        uint64 sequenceNumber,
         address,
         bytes32 randomNumber
     ) internal override {
-        uint256 id = seqToId[seq];
-        Proposal storage prop = proposals[id];
+        uint256 proposalId = sequenceToProposal[sequenceNumber];
+        Proposal storage prop = proposals[proposalId];
 
-        require(prop.state == State.Pending, "Already processed");
+        require(prop.state == State.Pending, "Invalid state");
 
         uint256 totalJurors = registry.getJurorCount();
-        require(totalJurors > 0, "No jurors available");
+        require(totalJurors >= prop.jurySize, "Not enough jurors");
 
-        uint256 actualJurySize = prop.jurySize;
-        if (actualJurySize > totalJurors) {
-            actualJurySize = totalJurors;
-        }
+        address[] memory selectedJurors = new address[](prop.jurySize);
+        uint256 selected = 0;
 
-        // Select random jurors
-        for (uint256 i = 0; i < actualJurySize; i++) {
-            uint256 randomIndex = uint256(keccak256(abi.encodePacked(randomNumber, i))) % totalJurors;
+        uint256 randomSeed = uint256(randomNumber);
+
+        for (uint256 i = 0; i < totalJurors && selected < prop.jurySize; i++) {
+            uint256 randomIndex = (randomSeed + i) % totalJurors;
             address juror = registry.getJurorAtIndex(randomIndex);
-            jurors[id].push(juror);
+
+            bool alreadySelected = false;
+            for (uint256 j = 0; j < selected; j++) {
+                if (selectedJurors[j] == juror) {
+                    alreadySelected = true;
+                    break;
+                }
+            }
+
+            if (!alreadySelected) {
+                selectedJurors[selected] = juror;
+                selected++;
+            }
         }
 
+        jurors[proposalId] = selectedJurors;
         prop.state = State.Active;
-        prop.deadline = uint64(block.timestamp + VOTING_PERIOD);
 
-        emit Selected(id, actualJurySize);
-    }
-
-    function getEntropy() internal view override returns (address) {
-        return address(entropy);
+        emit JurorsSelected(proposalId, selectedJurors);
     }
 
     function vote(uint256 id, bool support) external {
@@ -146,7 +177,6 @@ contract GovernorSortition is IEntropyConsumer {
         require(block.timestamp < prop.deadline, "Voting ended");
         require(!hasVoted[id][msg.sender], "Already voted");
 
-        // Check if sender is selected juror
         bool isSelectedJuror = false;
         for (uint256 i = 0; i < jurors[id].length; i++) {
             if (jurors[id][i] == msg.sender) {
@@ -165,13 +195,37 @@ contract GovernorSortition is IEntropyConsumer {
         }
 
         emit Voted(id, msg.sender, support);
+
+        // Refund gas if sponsored by proposer
+        if (prop.feesSponsoredByProposer && prop.gasPerVote > 0) {
+            (bool success, ) = msg.sender.call{value: prop.gasPerVote}("");
+            if (success) {
+                emit GasRefunded(id, msg.sender, prop.gasPerVote);
+            }
+        }
+
+        // Auto-execute if all jurors voted
+        uint256 totalVotes = prop.forVotes + prop.againstVotes;
+        if (totalVotes >= prop.jurySize) {
+            _executeProposal(id);
+        }
     }
 
     function execute(uint256 id) external {
         Proposal storage prop = proposals[id];
-
         require(prop.state == State.Active, "Not active");
-        require(block.timestamp >= prop.deadline, "Voting not ended");
+
+        uint256 totalVotes = prop.forVotes + prop.againstVotes;
+        require(
+            block.timestamp >= prop.deadline || totalVotes >= prop.jurySize,
+            "Voting not ended"
+        );
+
+        _executeProposal(id);
+    }
+
+    function _executeProposal(uint256 id) private {
+        Proposal storage prop = proposals[id];
 
         if (prop.forVotes > prop.againstVotes) {
             prop.state = State.Succeeded;
@@ -182,27 +236,8 @@ contract GovernorSortition is IEntropyConsumer {
         emit Executed(id, prop.state);
     }
 
-    // Withdraw accumulated excess fees (from user overpayments)
-    function withdraw(uint256 amount) external onlyOwner {
-        require(amount <= address(this).balance, "Insufficient balance");
-        payable(owner).transfer(amount);
-        emit Withdrawn(owner, amount);
-    }
-
-    function withdrawAll() external onlyOwner {
-        uint256 balance = address(this).balance;
-        require(balance > 0, "No balance");
-        payable(owner).transfer(balance);
-        emit Withdrawn(owner, balance);
-    }
-
-    function getBalance() external view returns (uint256) {
-        return address(this).balance;
-    }
-
-    function transferOwnership(address newOwner) external onlyOwner {
-        require(newOwner != address(0), "Invalid address");
-        owner = newOwner;
+    function getEntropy() internal view override returns (address) {
+        return address(entropy);
     }
 
     function getProposal(uint256 id) external view returns (
@@ -213,14 +248,31 @@ contract GovernorSortition is IEntropyConsumer {
         uint256 againstVotes,
         uint64 deadline,
         State state,
-        uint256 jurySize
+        uint256 jurySize,
+        bool feesSponsoredByProposer,
+        uint256 gasPerVote
     ) {
-        Proposal memory p = proposals[id];
-        return (p.title, p.description, p.proposer, p.forVotes, p.againstVotes, p.deadline, p.state, p.jurySize);
+        Proposal memory prop = proposals[id];
+        return (
+            prop.title,
+            prop.description,
+            prop.proposer,
+            prop.forVotes,
+            prop.againstVotes,
+            prop.deadline,
+            prop.state,
+            prop.jurySize,
+            prop.feesSponsoredByProposer,
+            prop.gasPerVote
+        );
     }
 
     function getJurors(uint256 id) external view returns (address[] memory) {
         return jurors[id];
+    }
+
+    function getRequiredFee(uint256 _jurySize) external pure returns (uint256) {
+        return _jurySize * GAS_PER_VOTE;
     }
 
     receive() external payable {}

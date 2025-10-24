@@ -1,30 +1,19 @@
-// Contract addresses from environment
-export const CONTRACTS = {
-    GOVERNANCE_TOKEN: import.meta.env.VITE_GOVERNANCE_TOKEN || '',
+// Contract addresses from .env
+export const CONTRACT_ADDRESSES = {
+    GOVERNOR: import.meta.env.VITE_GOVERNOR_SORTITION || '',
     JUROR_REGISTRY: import.meta.env.VITE_JUROR_REGISTRY || '',
-    GOVERNOR_SORTITION: import.meta.env.VITE_GOVERNOR_SORTITION || '',
+    GOVERNANCE_TOKEN: import.meta.env.VITE_GOVERNANCE_TOKEN || ''
 }
 
-// Network configuration
-export const NETWORK = {
-    chainId: parseInt(import.meta.env.VITE_CHAIN_ID) || 84532,
-    name: import.meta.env.VITE_NETWORK_NAME || 'Base Sepolia',
-    rpcUrl: import.meta.env.VITE_RPC_URL || 'https://sepolia.base.org',
-    blockExplorer: 'https://sepolia.basescan.org',
+// Pyth Entropy (Base Sepolia)
+export const PYTH_CONFIG = {
+    ENTROPY: import.meta.env.VITE_PYTH_ENTROPY || '0x41c9e39574F40Ad34c79f1C99B66A45eFB830d4c',
+    PROVIDER: import.meta.env.VITE_PYTH_PROVIDER || '0x6CC14824Ea2918f5De5C2f75A9Da968ad4BD6344'
 }
 
-// Pyth Entropy
-export const PYTH = {
-    ENTROPY: import.meta.env.VITE_PYTH_ENTROPY,
-    PROVIDER: import.meta.env.VITE_PYTH_PROVIDER,
+// Network
+export const NETWORK_CONFIG = {
+    CHAIN_ID: parseInt(import.meta.env.VITE_CHAIN_ID) || 84532,
+    NAME: import.meta.env.VITE_NETWORK_NAME || 'Base Sepolia',
+    RPC_URL: import.meta.env.VITE_RPC_URL || 'https://sepolia.base.org'
 }
-
-// Validation
-if (!CONTRACTS.GOVERNOR_SORTITION) {
-    console.warn('⚠️ Contracts not deployed yet. Run: forge script script/Deploy.s.sol')
-}
-
-console.log('📋 Config loaded:', {
-    network: NETWORK.name,
-    governor: CONTRACTS.GOVERNOR_SORTITION ? '✅' : '❌',
-})

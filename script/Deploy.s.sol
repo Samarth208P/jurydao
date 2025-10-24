@@ -37,35 +37,19 @@ contract DeployScript is Script {
         );
         console.log("   Governor:", address(governor));
 
+        // Fund the governor contract for Entropy fees
+        console.log("\n[4/4] Funding Governor contract...");
+        (bool success,) = address(governor).call{value: 0.01 ether}("");
+        require(success, "Failed to fund governor");
+        console.log("   Funded with 0.01 ETH");
+
         vm.stopBroadcast();
 
         // Print update instructions
         console.log("\n=== DEPLOYMENT COMPLETE ===\n");
-        console.log("Update your .env file with these addresses:\n");
+        console.log("Update your frontend .env with:\n");
         console.log("VITE_GOVERNANCE_TOKEN=%s", address(token));
         console.log("VITE_JUROR_REGISTRY=%s", address(registry));
         console.log("VITE_GOVERNOR_SORTITION=%s", address(governor));
-
-        // Print verification commands
-        console.log("\n=== VERIFICATION COMMANDS ===\n");
-        console.log("# Verify GovernanceToken");
-        console.log("forge verify-contract %s \\", address(token));
-        console.log("  contracts/GovernanceToken.sol:GovernanceToken \\");
-        console.log("  --chain-id 84532 \\");
-        console.log("  --etherscan-api-key $ETHERSCAN_API_KEY\n");
-
-        console.log("# Verify JurorRegistry");
-        console.log("forge verify-contract %s \\", address(registry));
-        console.log("  contracts/JurorRegistry.sol:JurorRegistry \\");
-        console.log("  --chain-id 84532 \\");
-        console.log("  --constructor-args $(cast abi-encode \"constructor(address)\" %s) \\", address(token));
-        console.log("  --etherscan-api-key $ETHERSCAN_API_KEY\n");
-
-        console.log("# Verify GovernorSortition");
-        console.log("forge verify-contract %s \\", address(governor));
-        console.log("  contracts/GovernorSortition.sol:GovernorSortition \\");
-        console.log("  --chain-id 84532 \\");
-        console.log("  --constructor-args $(cast abi-encode \"constructor(address,address,address)\" %s %s %s) \\", pythEntropy, pythProvider, address(registry));
-        console.log("  --etherscan-api-key $ETHERSCAN_API_KEY");
     }
 }

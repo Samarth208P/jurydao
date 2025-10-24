@@ -2,17 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { Link } from 'react-router-dom'
 import { useContract } from '../hooks/useContract'
 import { motion } from 'framer-motion'
-import {
-    ArrowRight,
-    Shield,
-    Users,
-    Vote,
-    Zap,
-    CheckCircle,
-    TrendingUp,
-    Lock,
-    Globe
-} from 'lucide-react'
+import { ArrowRight, Shield, Users, Vote, Zap, CheckCircle, TrendingUp, Lock, Globe } from 'lucide-react'
 
 const Home = () => {
     const [stats, setStats] = useState({
@@ -24,7 +14,7 @@ const Home = () => {
     const [loading, setLoading] = useState(true)
 
     const governor = useContract('governor')
-    const registry = useContract('registry')
+    const registry = useContract('jurorRegistry')
 
     useEffect(() => {
         fetchStats()
@@ -34,24 +24,19 @@ const Home = () => {
         if (!governor || !registry) return
 
         try {
-            // Get total proposals
             const proposalCount = await governor.proposalCount()
             const total = Number(proposalCount)
 
-            // Count active proposals and total votes
             let active = 0
             let votes = 0
 
             for (let i = 0; i < total; i++) {
                 const proposal = await governor.getProposal(i)
-                const state = proposal[6] // state index
-
-                if (state === 1) active++ // Active state
-
-                votes += Number(proposal[3]) + Number(proposal[4]) // forVotes + againstVotes
+                const state = proposal[6]
+                if (state === 1) active++
+                votes += Number(proposal[3]) + Number(proposal[4])
             }
 
-            // Get registered jurors
             const jurorCount = await registry.getJurorCount()
 
             setStats({
@@ -61,7 +46,7 @@ const Home = () => {
                 totalVotes: votes,
             })
 
-            console.log('📊 Stats loaded:', { total, active, jurors: Number(jurorCount), votes })
+            console.log('✅ Stats loaded:', { total, active, jurors: Number(jurorCount), votes })
         } catch (error) {
             console.error('Error fetching stats:', error.message)
         } finally {
@@ -69,85 +54,57 @@ const Home = () => {
         }
     }
 
-    const features = [
-        {
-            icon: Shield,
-            title: 'Verifiable Randomness',
-            description: 'Powered by Pyth Entropy VRF for cryptographically secure jury selection',
-            color: 'blue',
-        },
-        {
-            icon: Users,
-            title: 'Fair Selection',
-            description: 'Every staked participant has equal chance regardless of token holdings',
-            color: 'purple',
-        },
-        {
-            icon: Lock,
-            title: 'Sybil Resistant',
-            description: 'Minimum stake requirement prevents manipulation and ensures quality',
-            color: 'green',
-        },
-        {
-            icon: Zap,
-            title: 'Gas Efficient',
-            description: 'Optimized smart contracts with minimal transaction costs (~0.001 ETH)',
-            color: 'yellow',
-        },
-    ]
-
-    const benefits = [
-        'No plutocracy - equal voting power',
-        'Transparent on-chain voting',
-        'Automated jury selection',
-        'Secure & audited contracts',
-    ]
-
     return (
         <div className="min-h-screen">
             {/* Hero Section */}
-            <section className="relative overflow-hidden py-20 md:py-32">
-                {/* Gradient Background */}
-                <div className="absolute inset-0 bg-gradient-to-br from-accent-blue/10 via-dark-bg to-accent-purple/10" />
-                <div className="absolute inset-0 bg-[radial-gradient(circle_at_30%_50%,rgba(59,130,246,0.1),transparent_50%)]" />
+            <section className="relative py-20 px-4 overflow-hidden">
+                {/* Background gradient */}
+                <div className="absolute inset-0 bg-gradient-to-br from-blue-600/10 via-purple-600/10 to-pink-600/10 pointer-events-none"></div>
 
-                <div className="container mx-auto px-4 relative z-10">
+                <div className="container mx-auto relative z-10">
                     <motion.div
                         initial={{ opacity: 0, y: 30 }}
                         animate={{ opacity: 1, y: 0 }}
-                        transition={{ duration: 0.8 }}
-                        className="max-w-4xl mx-auto text-center"
+                        transition={{ duration: 0.6 }}
+                        className="text-center max-w-4xl mx-auto"
                     >
+                        {/* Logo */}
                         <motion.div
-                            initial={{ opacity: 0, scale: 0.9 }}
-                            animate={{ opacity: 1, scale: 1 }}
-                            transition={{ delay: 0.2 }}
-                            className="inline-block mb-6 px-6 py-2 rounded-full bg-accent-blue/10 border border-accent-blue/30"
+                            initial={{ scale: 0.5, opacity: 0 }}
+                            animate={{ scale: 1, opacity: 1 }}
+                            transition={{ duration: 0.8, type: 'spring' }}
+                            className="flex justify-center mb-8"
                         >
-              <span className="text-accent-blue font-semibold text-sm flex items-center gap-2">
-                <Globe size={16} />
-                Powered by Pyth Entropy on Base Sepolia
-              </span>
+                            <div className="relative">
+                                <motion.img
+                                    src="/favicon.png"
+                                    alt="JuryDAO Logo"
+                                    className="w-32 h-32 object-contain"
+                                    animate={{ rotate: [0, 5, -5, 0] }}
+                                    transition={{ duration: 4, repeat: Infinity, ease: 'easeInOut' }}
+                                />
+                                {/* Glow effect */}
+                                <div className="absolute inset-0 bg-gradient-to-r from-blue-500/30 via-purple-500/30 to-pink-500/30 blur-3xl rounded-full" />
+                            </div>
                         </motion.div>
 
-                        <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-white via-gray-100 to-gray-300 bg-clip-text text-transparent">
-                            Decentralized Governance
-                            <br />
-                            <span className="text-accent-blue">Done Right</span>
+                        <h1 className="text-5xl md:text-7xl font-bold mb-6 bg-gradient-to-r from-blue-400 via-purple-500 to-pink-500 bg-clip-text text-transparent">
+                            JuryDAO
                         </h1>
-
-                        <p className="text-xl md:text-2xl text-gray-400 mb-10 max-w-3xl mx-auto">
-                            Fair decision-making through cryptographically verifiable random jury selection.
-                            No whales. No manipulation. Just pure democracy.
+                        <p className="text-xl md:text-2xl text-gray-300 mb-8">
+                            Decentralized Governance Through Random Jury Selection
+                        </p>
+                        <p className="text-gray-400 mb-12 max-w-2xl mx-auto">
+                            Powered by Pyth Entropy for verifiable randomness, ensuring fair and transparent jury selection for every proposal
                         </p>
 
-                        <div className="flex flex-col sm:flex-row gap-4 justify-center items-center">
-                            <Link to="/dashboard" className="btn btn-primary text-lg px-8 py-4 group">
-                                View Proposals
-                                <ArrowRight className="group-hover:translate-x-1 transition-transform" size={20} />
+                        <div className="flex flex-col sm:flex-row gap-4 justify-center">
+                            <Link to="/create-proposal" className="btn btn-primary">
+                                Create Proposal
+                                <ArrowRight className="ml-2" size={20} />
                             </Link>
-                            <Link to="/juror" className="btn btn-secondary text-lg px-8 py-4">
-                                Become a Juror
+                            <Link to="/dashboard" className="btn btn-secondary">
+                                View Proposals
                             </Link>
                         </div>
                     </motion.div>
@@ -155,62 +112,107 @@ const Home = () => {
             </section>
 
             {/* Stats Section */}
-            <section className="py-16 bg-dark-card/30 backdrop-blur-sm border-y border-dark-border">
-                <div className="container mx-auto px-4">
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6 max-w-6xl mx-auto">
+            <section className="py-16 px-4 bg-gray-800/30">
+                <div className="container mx-auto">
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.2 }}
+                        className="grid grid-cols-2 md:grid-cols-4 gap-6"
+                    >
                         {[
-                            { label: 'Total Proposals', value: loading ? '...' : stats.totalProposals, color: 'blue' },
-                            { label: 'Active Proposals', value: loading ? '...' : stats.activeProposals, color: 'green' },
-                            { label: 'Registered Jurors', value: loading ? '...' : stats.registeredJurors, color: 'purple' },
-                            { label: 'Votes Cast', value: loading ? '...' : stats.totalVotes, color: 'yellow' },
+                            {
+                                icon: Vote,
+                                label: 'Total Proposals',
+                                value: stats.totalProposals,
+                                color: 'from-blue-500 to-blue-600',
+                            },
+                            {
+                                icon: TrendingUp,
+                                label: 'Active Proposals',
+                                value: stats.activeProposals,
+                                color: 'from-green-500 to-green-600',
+                            },
+                            {
+                                icon: Shield,
+                                label: 'Registered Jurors',
+                                value: stats.registeredJurors,
+                                color: 'from-purple-500 to-purple-600',
+                            },
+                            {
+                                icon: CheckCircle,
+                                label: 'Total Votes',
+                                value: stats.totalVotes,
+                                color: 'from-orange-500 to-orange-600',
+                            },
                         ].map((stat, index) => (
                             <motion.div
                                 key={stat.label}
-                                initial={{ opacity: 0, y: 20 }}
-                                animate={{ opacity: 1, y: 0 }}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
                                 transition={{ delay: 0.1 * index }}
-                                className="text-center p-6 rounded-xl bg-dark-card border border-dark-border hover:border-accent-blue/50 transition-all"
+                                className="card text-center"
                             >
-                                <div className={`text-4xl md:text-5xl font-bold mb-2 text-accent-${stat.color}`}>
-                                    {stat.value}
-                                    {!loading && stat.value > 0 && '+'}
+                                <div className={`inline-flex p-3 rounded-lg bg-gradient-to-br ${stat.color} mb-3`}>
+                                    <stat.icon size={24} className="text-white" />
                                 </div>
-                                <div className="text-gray-400 text-sm md:text-base">{stat.label}</div>
+                                <div className="text-3xl font-bold mb-1">
+                                    {loading ? '...' : stat.value}
+                                </div>
+                                <div className="text-sm text-gray-400">{stat.label}</div>
                             </motion.div>
                         ))}
-                    </div>
+                    </motion.div>
                 </div>
             </section>
 
             {/* Features Section */}
-            <section className="py-20">
-                <div className="container mx-auto px-4">
+            <section className="py-20 px-4">
+                <div className="container mx-auto">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
                         className="text-center mb-16"
                     >
-                        <h2 className="text-4xl md:text-5xl font-bold mb-4">Why JuryDAO?</h2>
-                        <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-                            Built with cutting-edge technology to ensure fair, transparent, and secure governance
+                        <h2 className="text-4xl font-bold mb-4">How It Works</h2>
+                        <p className="text-gray-400 max-w-2xl mx-auto">
+                            JuryDAO combines blockchain technology with verifiable randomness to create a fair and transparent governance system
                         </p>
                     </motion.div>
 
-                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6 max-w-7xl mx-auto">
-                        {features.map((feature, index) => (
+                    <div className="grid md:grid-cols-3 gap-8">
+                        {[
+                            {
+                                icon: Users,
+                                title: 'Register as Juror',
+                                description: 'Stake DGOV tokens to become eligible for random jury selection',
+                                color: 'blue',
+                            },
+                            {
+                                icon: Zap,
+                                title: 'Random Selection',
+                                description: 'Pyth Entropy ensures verifiable randomness for fair jury selection',
+                                color: 'purple',
+                            },
+                            {
+                                icon: Vote,
+                                title: 'Vote & Earn',
+                                description: 'Selected jurors vote on proposals and earn rewards for participation',
+                                color: 'green',
+                            },
+                        ].map((feature, index) => (
                             <motion.div
                                 key={feature.title}
                                 initial={{ opacity: 0, y: 20 }}
-                                whileInView={{ opacity: 1, y: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: 0.1 * index }}
-                                className="card hover:border-accent-blue/50 transition-all group"
+                                animate={{ opacity: 1, y: 0 }}
+                                transition={{ delay: 0.4 + index * 0.1 }}
+                                className="card hover:border-blue-500/50 transition-all group"
                             >
-                                <div className={`w-14 h-14 rounded-xl bg-accent-${feature.color}/10 flex items-center justify-center mb-4 group-hover:scale-110 transition-transform`}>
-                                    <feature.icon className={`text-accent-${feature.color}`} size={28} />
+                                <div className={`inline-flex p-4 rounded-lg bg-${feature.color}-500/10 border border-${feature.color}-500/20 mb-4 group-hover:scale-110 transition-transform`}>
+                                    <feature.icon size={32} className={`text-${feature.color}-400`} />
                                 </div>
-                                <h3 className="text-xl font-bold mb-2">{feature.title}</h3>
+                                <h3 className="text-xl font-bold mb-3">{feature.title}</h3>
                                 <p className="text-gray-400">{feature.description}</p>
                             </motion.div>
                         ))}
@@ -218,151 +220,83 @@ const Home = () => {
                 </div>
             </section>
 
-            {/* How It Works Section */}
-            <section className="py-20 bg-dark-card/30">
-                <div className="container mx-auto px-4">
+            {/* Benefits Section */}
+            <section className="py-20 px-4 bg-gray-800/30">
+                <div className="container mx-auto">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.6 }}
                         className="text-center mb-16"
                     >
-                        <h2 className="text-4xl md:text-5xl font-bold mb-4">How It Works</h2>
-                        <p className="text-xl text-gray-400 max-w-2xl mx-auto">
-                            Simple, transparent process from proposal to execution
+                        <h2 className="text-4xl font-bold mb-4">Why JuryDAO?</h2>
+                        <p className="text-gray-400 max-w-2xl mx-auto">
+                            Experience truly decentralized governance with verifiable randomness
                         </p>
                     </motion.div>
 
-                    <div className="max-w-5xl mx-auto grid md:grid-cols-3 gap-8">
+                    <div className="grid md:grid-cols-2 lg:grid-cols-4 gap-6">
                         {[
                             {
-                                step: '01',
-                                title: 'Stake & Register',
-                                description: 'Stake minimum 100 DGOV tokens to become an eligible juror',
+                                icon: Shield,
+                                title: 'Fair Selection',
+                                description: 'Verifiable randomness ensures unbiased jury selection',
+                            },
+                            {
                                 icon: Lock,
+                                title: 'Transparent',
+                                description: 'All actions are recorded on-chain and publicly verifiable',
                             },
                             {
-                                step: '02',
-                                title: 'Random Selection',
-                                description: 'Pyth Entropy VRF randomly selects jurors for each proposal',
-                                icon: Zap,
+                                icon: Globe,
+                                title: 'Decentralized',
+                                description: 'No single entity controls the governance process',
                             },
                             {
-                                step: '03',
-                                title: 'Vote & Execute',
-                                description: 'Selected jurors vote during 7-day period, then anyone can execute',
-                                icon: Vote,
+                                icon: CheckCircle,
+                                title: 'Rewarding',
+                                description: 'Earn rewards for active participation in governance',
                             },
-                        ].map((item, index) => (
+                        ].map((benefit, index) => (
                             <motion.div
-                                key={item.step}
-                                initial={{ opacity: 0, x: -20 }}
-                                whileInView={{ opacity: 1, x: 0 }}
-                                viewport={{ once: true }}
-                                transition={{ delay: 0.2 * index }}
-                                className="relative"
+                                key={benefit.title}
+                                initial={{ opacity: 0, scale: 0.9 }}
+                                animate={{ opacity: 1, scale: 1 }}
+                                transition={{ delay: 0.7 + index * 0.1 }}
+                                className="card text-center"
                             >
-                                <div className="card text-center">
-                                    <div className="text-6xl font-bold text-accent-blue/20 mb-4">{item.step}</div>
-                                    <div className="w-16 h-16 rounded-full bg-accent-blue/10 flex items-center justify-center mx-auto mb-4">
-                                        <item.icon className="text-accent-blue" size={32} />
-                                    </div>
-                                    <h3 className="text-2xl font-bold mb-3">{item.title}</h3>
-                                    <p className="text-gray-400">{item.description}</p>
+                                <div className="inline-flex p-3 rounded-lg bg-blue-500/10 border border-blue-500/20 mb-3">
+                                    <benefit.icon size={24} className="text-blue-400" />
                                 </div>
-                                {index < 2 && (
-                                    <div className="hidden md:block absolute top-1/2 -right-4 transform -translate-y-1/2">
-                                        <ArrowRight className="text-accent-blue/30" size={32} />
-                                    </div>
-                                )}
+                                <h3 className="font-bold mb-2">{benefit.title}</h3>
+                                <p className="text-sm text-gray-400">{benefit.description}</p>
                             </motion.div>
                         ))}
                     </div>
                 </div>
             </section>
 
-            {/* Benefits Section */}
-            <section className="py-20">
-                <div className="container mx-auto px-4">
-                    <div className="max-w-5xl mx-auto grid md:grid-cols-2 gap-12 items-center">
-                        <motion.div
-                            initial={{ opacity: 0, x: -30 }}
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: true }}
-                        >
-                            <h2 className="text-4xl md:text-5xl font-bold mb-6">
-                                True Democratic
-                                <br />
-                                <span className="text-accent-purple">Governance</span>
-                            </h2>
-                            <p className="text-xl text-gray-400 mb-8">
-                                Unlike token-weighted systems, JuryDAO ensures every participant has an equal voice through random selection.
-                            </p>
-                            <div className="space-y-4">
-                                {benefits.map((benefit, index) => (
-                                    <motion.div
-                                        key={benefit}
-                                        initial={{ opacity: 0, x: -20 }}
-                                        whileInView={{ opacity: 1, x: 0 }}
-                                        viewport={{ once: true }}
-                                        transition={{ delay: 0.1 * index }}
-                                        className="flex items-center gap-3"
-                                    >
-                                        <CheckCircle className="text-green-500 flex-shrink-0" size={24} />
-                                        <span className="text-lg">{benefit}</span>
-                                    </motion.div>
-                                ))}
-                            </div>
-                        </motion.div>
-
-                        <motion.div
-                            initial={{ opacity: 0, x: 30 }}
-                            whileInView={{ opacity: 1, x: 0 }}
-                            viewport={{ once: true }}
-                            className="card bg-gradient-to-br from-accent-blue/10 to-accent-purple/10 border-accent-blue/30 p-8"
-                        >
-                            <TrendingUp className="text-accent-blue mb-4" size={48} />
-                            <h3 className="text-2xl font-bold mb-4">Live Network Stats</h3>
-                            <div className="space-y-4">
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-400">Total Proposals</span>
-                                    <span className="text-2xl font-bold">{loading ? '...' : stats.totalProposals}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-400">Active Jurors</span>
-                                    <span className="text-2xl font-bold">{loading ? '...' : stats.registeredJurors}</span>
-                                </div>
-                                <div className="flex justify-between items-center">
-                                    <span className="text-gray-400">Community Votes</span>
-                                    <span className="text-2xl font-bold">{loading ? '...' : stats.totalVotes}</span>
-                                </div>
-                            </div>
-                        </motion.div>
-                    </div>
-                </div>
-            </section>
-
             {/* CTA Section */}
-            <section className="py-20 bg-gradient-to-br from-accent-blue/10 via-dark-bg to-accent-purple/10">
-                <div className="container mx-auto px-4">
+            <section className="py-20 px-4">
+                <div className="container mx-auto">
                     <motion.div
                         initial={{ opacity: 0, y: 20 }}
-                        whileInView={{ opacity: 1, y: 0 }}
-                        viewport={{ once: true }}
-                        className="card max-w-4xl mx-auto text-center border-accent-blue/30 bg-dark-card/50 backdrop-blur-sm p-12"
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.9 }}
+                        className="card bg-gradient-to-br from-blue-600/10 to-purple-600/10 border-blue-500/30 text-center p-12"
                     >
-                        <h2 className="text-4xl md:text-5xl font-bold mb-6">
-                            Ready to Participate?
+                        <h2 className="text-3xl md:text-4xl font-bold mb-4">
+                            Ready to Get Started?
                         </h2>
-                        <p className="text-xl text-gray-400 mb-10 max-w-2xl mx-auto">
-                            Join the future of decentralized governance. Stake tokens, get selected, and make your voice heard.
+                        <p className="text-gray-400 mb-8 max-w-2xl mx-auto">
+                            Join the future of decentralized governance. Stake tokens, participate in proposals, and shape the community's direction.
                         </p>
                         <div className="flex flex-col sm:flex-row gap-4 justify-center">
-                            <Link to="/dashboard" className="btn btn-primary text-lg px-8 py-4">
-                                Explore Proposals
+                            <Link to="/juror" className="btn btn-primary">
+                                Become a Juror
                             </Link>
-                            <Link to="/juror" className="btn btn-secondary text-lg px-8 py-4">
-                                Register as Juror
+                            <Link to="/dashboard" className="btn btn-secondary">
+                                Explore Proposals
                             </Link>
                         </div>
                     </motion.div>

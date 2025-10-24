@@ -1,61 +1,62 @@
 import { useMemo } from 'react'
 import { ethers } from 'ethers'
 import { useWallet } from '../context/WalletContext'
-import { CONTRACTS } from '../config/contracts'
+import { CONTRACT_ADDRESSES } from '../config/contracts'
 
-// Import ABIs directly from Foundry output
-import GovernanceTokenArtifact from '../../out/GovernanceToken.sol/GovernanceToken.json'
-import JurorRegistryArtifact from '../../out/JurorRegistry.sol/JurorRegistry.json'
-import GovernorSortitionArtifact from '../../out/GovernorSortition.sol/GovernorSortition.json'
+// Import ABIs from Foundry out folder
+import GovernorSortitionABI from '../../out/GovernorSortition.sol/GovernorSortition.json'
+import JurorRegistryABI from '../../out/JurorRegistry.sol/JurorRegistry.json'
+import GovernanceTokenABI from '../../out/GovernanceToken.sol/GovernanceToken.json'
 
 export const useContract = (contractName) => {
-    const { signer, isConnected } = useWallet()
+    const { provider, signer } = useWallet()
 
     return useMemo(() => {
-        if (!signer || !isConnected) {
-            console.log('⏳ Wallet not connected')
-            return null
-        }
-
-        const contractConfigs = {
-            governor: {
-                address: CONTRACTS.GOVERNOR_SORTITION,
-                abi: GovernorSortitionArtifact.abi,
-            },
-            registry: {
-                address: CONTRACTS.JUROR_REGISTRY,
-                abi: JurorRegistryArtifact.abi,
-            },
-            token: {
-                address: CONTRACTS.GOVERNANCE_TOKEN,
-                abi: GovernanceTokenArtifact.abi,
-            },
-        }
-
-        const config = contractConfigs[contractName]
-
-        if (!config) {
-            console.error(`❌ Unknown contract: ${contractName}`)
-            return null
-        }
-
-        if (!config.address) {
-            console.error(`❌ Address not set for ${contractName}. Check .env file.`)
-            return null
-        }
-
-        if (!Array.isArray(config.abi)) {
-            console.error(`❌ Invalid ABI for ${contractName}`)
+        if (!provider) {
+            // Silent return - this is normal before wallet connection
             return null
         }
 
         try {
-            const contract = new ethers.Contract(config.address, config.abi, signer)
-            console.log(`✅ ${contractName} contract loaded:`, config.address.slice(0, 6))
+            let address, abi
+
+            switch (contractName) {
+                case 'governor':
+                    address = CONTRACT_ADDRESSES.GOVERNOR
+                    abi = GovernorSortitionABI.abi
+                    break
+                case 'jurorRegistry':
+                    address = CONTRACT_ADDRESSES.JUROR_REGISTRY
+                    abi = JurorRegistryABI.abi
+                    break
+                case 'token':
+                case 'governanceToken':
+                    address = CONTRACT_ADDRESSES.GOVERNANCE_TOKEN
+                    abi = GovernanceTokenABI.abi
+                    break
+                default:
+                    console.error(`❌ Unknown contract: ${contractName}`)
+                    return null
+            }
+
+            if (!address || address.length === 0) {
+                console.error(`❌ Contract address not configured: ${contractName}`)
+                console.error(`Please check .env file`)
+                return null
+            }
+
+            const contract = new ethers.Contract(
+                address,
+                abi,
+                signer || provider
+            )
+
+            console.log(`✅ ${contractName} loaded:`, address.slice(0, 6) + '...' + address.slice(-4))
+
             return contract
         } catch (error) {
-            console.error(`❌ Failed to create ${contractName} contract:`, error)
+            console.error(`❌ Error loading ${contractName}:`, error)
             return null
         }
-    }, [contractName, signer, isConnected])
+    }, [provider, signer, contractName])
 }

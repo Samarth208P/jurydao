@@ -1,59 +1,68 @@
-export const MIN_STAKE = 100 // Minimum stake in DGOV tokens
-export const VOTING_PERIOD = 7 * 24 * 60 * 60 // 7 days in seconds
+import { CONTRACT_ADDRESSES, PYTH_CONFIG, NETWORK_CONFIG } from '../config/contracts'
 
-export const PROPOSAL_STATES = {
+// Re-export contract addresses
+export const GOVERNOR_ADDRESS = CONTRACT_ADDRESSES.GOVERNOR
+export const JUROR_REGISTRY_ADDRESS = CONTRACT_ADDRESSES.JUROR_REGISTRY
+export const GOVERNANCE_TOKEN_ADDRESS = CONTRACT_ADDRESSES.GOVERNANCE_TOKEN
+
+// Re-export Pyth config
+export const PYTH_ENTROPY_ADDRESS = PYTH_CONFIG.ENTROPY
+export const PYTH_PROVIDER_ADDRESS = PYTH_CONFIG.PROVIDER
+
+// Re-export network config
+export const CHAIN_ID = NETWORK_CONFIG.CHAIN_ID
+export const NETWORK_NAME = NETWORK_CONFIG.NAME
+export const RPC_URL = NETWORK_CONFIG.RPC_URL
+
+// Proposal states
+export const PROPOSAL_STATE = {
     PENDING: 0,
     ACTIVE: 1,
-    DEFEATED: 2,
-    SUCCEEDED: 3,
-    EXECUTED: 4
+    COMPLETED: 2,
+    EXECUTED: 3,
+    DEFEATED: 4
 }
 
+export const PROPOSAL_STATE_LABELS = {
+    0: 'Pending',
+    1: 'Active',
+    2: 'Completed',
+    3: 'Executed',
+    4: 'Defeated'
+}
+
+// State colors for UI
 export const STATE_COLORS = {
-    0: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/30',
-    1: 'bg-blue-500/10 text-blue-400 border-blue-500/30',
-    2: 'bg-red-500/10 text-red-400 border-red-500/30',
-    3: 'bg-green-500/10 text-green-400 border-green-500/30',
-    4: 'bg-purple-500/10 text-purple-400 border-purple-500/30'
+    0: 'bg-yellow-500/20 text-yellow-300 border-yellow-500/30',   // Pending
+    1: 'bg-blue-500/20 text-blue-300 border-blue-500/30',         // Active
+    2: 'bg-green-500/20 text-green-300 border-green-500/30',      // Completed
+    3: 'bg-purple-500/20 text-purple-300 border-purple-500/30',   // Executed
+    4: 'bg-red-500/20 text-red-300 border-red-500/30'             // Defeated
 }
 
-export const JURY_SIZES = [3, 5, 7, 10]
-
-// Block Explorer Configuration
-export const BLOCK_EXPLORER = {
-    BASE_SEPOLIA: 'https://sepolia.basescan.org',
-    BASE_MAINNET: 'https://basescan.org'
+// Text colors for states
+export const STATE_TEXT_COLORS = {
+    0: 'text-yellow-400',
+    1: 'text-blue-400',
+    2: 'text-green-400',
+    3: 'text-purple-400',
+    4: 'text-red-400'
 }
 
-export const NETWORK_CONFIG = {
-    84532: { // Base Sepolia
-        name: 'Base Sepolia',
-        explorer: BLOCK_EXPLORER.BASE_SEPOLIA,
-        currency: 'ETH'
-    },
-    8453: { // Base Mainnet
-        name: 'Base',
-        explorer: BLOCK_EXPLORER.BASE_MAINNET,
-        currency: 'ETH'
-    }
-}
+// Time constants
+export const SECONDS_PER_DAY = 86400
+export const SECONDS_PER_HOUR = 3600
+export const SECONDS_PER_MINUTE = 60
 
-export const getExplorerUrl = (chainId = 84532) => {
-    return NETWORK_CONFIG[chainId]?.explorer || BLOCK_EXPLORER.BASE_SEPOLIA
-}
+// Gas constants
+export const BASE_FEE = '0.01' // 0.01 ETH base fee
+export const GAS_PER_VOTE = '0.001' // Gas cost per vote
 
-export const getExplorerLink = (type, value, chainId = 84532) => {
-    const explorer = getExplorerUrl(chainId)
-    switch (type) {
-        case 'tx':
-            return `${explorer}/tx/${value}`
-        case 'address':
-            return `${explorer}/address/${value}`
-        case 'block':
-            return `${explorer}/block/${value}`
-        case 'token':
-            return `${explorer}/token/${value}`
-        default:
-            return explorer
-    }
-}
+// Juror constants
+export const MIN_STAKE = '100' // Minimum stake to become juror
+export const MIN_JURORS = 3
+export const MAX_JURORS = 25
+
+// Voting constants
+export const MIN_VOTING_DURATION = 3600 // 1 hour
+export const MAX_VOTING_DURATION = 2592000 // 30 days

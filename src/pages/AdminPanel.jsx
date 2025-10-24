@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react'
 import { useContract } from '../hooks/useContract'
 import { useWallet } from '../context/WalletContext'
-import { DollarSign, TrendingUp, Shield, Wallet } from 'lucide-react'
+import { DollarSign, TrendingUp, Shield, Wallet, AlertCircle } from 'lucide-react'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
@@ -13,12 +13,14 @@ const AdminPanel = () => {
     const [loading, setLoading] = useState(true)
     const [withdrawing, setWithdrawing] = useState(false)
 
-    const { account, isConnected, connectWallet } = useWallet()
+    const { account, isConnected, connectWallet, provider } = useWallet()
     const governor = useContract('governor')
 
     useEffect(() => {
-        checkOwnership()
-        fetchBalance()
+        if (governor && account) {
+            checkOwnership()
+            fetchBalance()
+        }
     }, [governor, account])
 
     const checkOwnership = async () => {
@@ -26,65 +28,66 @@ const AdminPanel = () => {
 
         try {
             const owner = await governor.owner()
-            setIsOwner(owner.toLowerCase() === account.toLowerCase())
-            console.log('🔐 Is owner:', owner.toLowerCase() === account.toLowerCase())
+            const isOwnerResult = owner.toLowerCase() === account.toLowerCase()
+            setIsOwner(isOwnerResult)
+            console.log('Is owner:', isOwnerResult)
         } catch (error) {
-            console.error('Error checking ownership:', error)
+            console.error('Error checking ownership:', error.message)
         } finally {
             setLoading(false)
         }
     }
 
     const fetchBalance = async () => {
-        if (!governor) return
+        if (!governor || !provider) return
 
         try {
-            const bal = await governor.getBalance()
-            setBalance(ethers.formatEther(bal))
-            console.log('💰 Contract balance:', ethers.formatEther(bal), 'ETH')
+            // Get contract address
+            const contractAddress = await governor.getAddress()
+
+            // Get ETH balance using provider
+            const balance = await provider.getBalance(contractAddress)
+            const balanceInEth = ethers.formatEther(balance)
+
+            setBalance(balanceInEth)
+            console.log('✅ Contract balance:', balanceInEth, 'ETH')
         } catch (error) {
-            console.error('Error fetching balance:', error)
+            console.error('❌ Error fetching balance:', error.message)
         }
     }
 
     const handleWithdraw = async () => {
-        if (!governor || !withdrawAmount) return
+        if (!governor || !withdrawAmount) {
+            toast.error('Please enter an amount')
+            return
+        }
+
+        const amount = parseFloat(withdrawAmount)
+        if (amount <= 0 || amount > parseFloat(balance)) {
+            toast.error('Invalid amount')
+            return
+        }
+
+        setWithdrawing(true)
 
         try {
-            const amount = ethers.parseEther(withdrawAmount)
-            setWithdrawing(true)
+            console.log('Withdrawing:', amount, 'ETH')
 
-            console.log('💸 Withdrawing:', withdrawAmount, 'ETH')
-            const tx = await governor.withdraw(amount)
+            const amountInWei = ethers.parseEther(withdrawAmount)
+            const tx = await governor.withdraw(amountInWei)
+
             toast.loading('Withdrawing...', { id: 'withdraw' })
             await tx.wait()
 
-            toast.success(`Withdrew ${withdrawAmount} ETH!`, { id: 'withdraw' })
+            toast.success(`Successfully withdrew ${amount} ETH`, { id: 'withdraw' })
+            console.log('✅ Withdrawal successful')
+
+            // Refresh balance
+            fetchBalance()
             setWithdrawAmount('')
-            fetchBalance()
         } catch (error) {
-            console.error('Withdraw error:', error)
-            toast.error('Withdrawal failed', { id: 'withdraw' })
-        } finally {
-            setWithdrawing(false)
-        }
-    }
-
-    const handleWithdrawAll = async () => {
-        if (!governor) return
-
-        try {
-            setWithdrawing(true)
-            console.log('💸 Withdrawing all ETH')
-            const tx = await governor.withdrawAll()
-            toast.loading('Withdrawing all...', { id: 'withdraw' })
-            await tx.wait()
-
-            toast.success('Withdrew all ETH!', { id: 'withdraw' })
-            fetchBalance()
-        } catch (error) {
-            console.error('Withdraw all error:', error)
-            toast.error('Withdrawal failed', { id: 'withdraw' })
+            console.error('❌ Withdraw error:', error)
+            toast.error('Failed to withdraw', { id: 'withdraw' })
         } finally {
             setWithdrawing(false)
         }
@@ -98,9 +101,9 @@ const AdminPanel = () => {
                     animate={{ opacity: 1, scale: 1 }}
                     className="card max-w-md w-full text-center p-8"
                 >
-                    <Shield size={64} className="mx-auto mb-4 text-accent-blue" />
-                    <h2 className="text-2xl font-bold mb-4">Admin Access Required</h2>
-                    <p className="text-gray-400 mb-6">Connect your wallet to access the admin panel</p>
+                    <Shield size={48} className="mx-auto mb-4 text-accent-blue" />
+                    <h2 className="text-2xl font-bold mb-4">Admin Panel</h2>
+                    <p className="text-gray-400 mb-6">Connect your wallet to access admin functions</p>
                     <button onClick={connectWallet} className="btn btn-primary w-full">
                         Connect Wallet
                     </button>
@@ -112,10 +115,7 @@ const AdminPanel = () => {
     if (loading) {
         return (
             <div className="min-h-screen flex items-center justify-center">
-                <div className="text-center">
-                    <div className="spinner mb-4"></div>
-                    <p className="text-gray-400">Checking admin access...</p>
-                </div>
+                <div className="spinner"></div>
             </div>
         )
     }
@@ -126,16 +126,11 @@ const AdminPanel = () => {
                 <motion.div
                     initial={{ opacity: 0, scale: 0.95 }}
                     animate={{ opacity: 1, scale: 1 }}
-                    className="card max-w-md w-full text-center p-8"
+                    className="card max-w-md w-full text-center p-8 bg-red-500/5 border-red-500/20"
                 >
-                    <Shield size={64} className="mx-auto mb-4 text-red-500" />
+                    <AlertCircle size={48} className="mx-auto mb-4 text-red-500" />
                     <h2 className="text-2xl font-bold mb-4">Access Denied</h2>
-                    <p className="text-gray-400 mb-6">
-                        You don't have admin privileges for this contract
-                    </p>
-                    <p className="text-sm text-gray-500">
-                        Connected as: <span className="font-mono">{account?.slice(0, 10)}...</span>
-                    </p>
+                    <p className="text-gray-400">You are not the contract owner</p>
                 </motion.div>
             </div>
         )
@@ -148,84 +143,135 @@ const AdminPanel = () => {
                     initial={{ opacity: 0, y: 20 }}
                     animate={{ opacity: 1, y: 0 }}
                 >
-                    <div className="flex items-center gap-3 mb-2">
-                        <Shield size={32} className="text-accent-blue" />
-                        <h1 className="text-4xl font-bold">Admin Panel</h1>
-                    </div>
+                    <h1 className="text-4xl font-bold mb-2">Admin Panel</h1>
                     <p className="text-gray-400 mb-8">Manage contract funds and settings</p>
 
-                    {/* Balance Card */}
-                    <div className="card mb-6 bg-gradient-to-br from-accent-blue/10 to-accent-purple/10 border-accent-blue/30">
-                        <div className="flex items-center gap-3 mb-4">
-                            <Wallet size={24} className="text-accent-blue" />
-                            <h2 className="text-2xl font-bold">Contract Balance</h2>
-                        </div>
-                        <div className="text-5xl font-bold mb-2">
-                            {parseFloat(balance).toFixed(6)} ETH
-                        </div>
-                        <p className="text-sm text-gray-400">
-                            Accumulated fees from proposal creation
-                        </p>
+                    {/* Stats */}
+                    <div className="grid md:grid-cols-3 gap-6 mb-8">
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            className="card"
+                        >
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-gray-400">Contract Balance</span>
+                                <DollarSign className="text-green-400" size={20} />
+                            </div>
+                            <div className="text-3xl font-bold text-green-400">
+                                {parseFloat(balance).toFixed(4)} ETH
+                            </div>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.1 }}
+                            className="card"
+                        >
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-gray-400">Your Address</span>
+                                <Wallet className="text-blue-400" size={20} />
+                            </div>
+                            <div className="text-sm font-mono">
+                                {account?.slice(0, 10)}...{account?.slice(-8)}
+                            </div>
+                        </motion.div>
+
+                        <motion.div
+                            initial={{ opacity: 0, scale: 0.9 }}
+                            animate={{ opacity: 1, scale: 1 }}
+                            transition={{ delay: 0.2 }}
+                            className="card"
+                        >
+                            <div className="flex items-center justify-between mb-3">
+                                <span className="text-gray-400">Admin Status</span>
+                                <Shield className="text-purple-400" size={20} />
+                            </div>
+                            <div className="text-lg font-bold text-purple-400">Owner</div>
+                        </motion.div>
                     </div>
 
                     {/* Withdraw Section */}
-                    <div className="card mb-6">
-                        <div className="flex items-center gap-3 mb-6">
-                            <DollarSign size={24} className="text-green-500" />
-                            <h2 className="text-2xl font-bold">Withdraw Funds</h2>
+                    <motion.div
+                        initial={{ opacity: 0, y: 20 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        transition={{ delay: 0.3 }}
+                        className="card"
+                    >
+                        <h2 className="text-2xl font-bold mb-6 flex items-center gap-2">
+                            <TrendingUp size={24} />
+                            Withdraw Funds
+                        </h2>
+
+                        <div className="card bg-blue-500/5 border-blue-500/20 mb-6">
+                            <p className="text-sm text-gray-400">
+                                <strong className="text-blue-400">Info:</strong> Withdraw ETH from the contract to your
+                                wallet. This includes proposal creation fees and unused gas sponsorship funds.
+                            </p>
                         </div>
 
-                        <div className="space-y-4">
-                            {/* Partial Withdrawal */}
-                            <div>
-                                <label className="block text-sm font-semibold mb-2">
-                                    Withdraw Amount (ETH)
-                                </label>
-                                <div className="flex gap-3">
-                                    <input
-                                        type="number"
-                                        value={withdrawAmount}
-                                        onChange={(e) => setWithdrawAmount(e.target.value)}
-                                        placeholder="0.001"
-                                        step="0.000001"
-                                        min="0"
-                                        max={balance}
-                                        className="input flex-1"
-                                    />
-                                    <button
-                                        onClick={handleWithdraw}
-                                        disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
-                                        className="btn btn-primary"
-                                    >
-                                        {withdrawing ? 'Withdrawing...' : 'Withdraw'}
-                                    </button>
-                                </div>
-                                <p className="text-sm text-gray-500 mt-2">
-                                    Available: {parseFloat(balance).toFixed(6)} ETH
-                                </p>
-                            </div>
-
-                            {/* Withdraw All */}
-                            <div className="pt-4 border-t border-dark-border">
+                        <div className="mb-6">
+                            <label className="block text-sm font-semibold mb-2">Amount (ETH)</label>
+                            <div className="relative">
+                                <input
+                                    type="number"
+                                    value={withdrawAmount}
+                                    onChange={(e) => setWithdrawAmount(e.target.value)}
+                                    placeholder="0.0"
+                                    step="0.001"
+                                    min="0"
+                                    max={balance}
+                                    className="input pr-20"
+                                />
                                 <button
-                                    onClick={handleWithdrawAll}
-                                    disabled={withdrawing || parseFloat(balance) <= 0}
-                                    className="btn btn-secondary w-full"
+                                    onClick={() => setWithdrawAmount(balance)}
+                                    className="absolute right-2 top-1/2 -translate-y-1/2 px-3 py-1 rounded bg-blue-500/20 text-blue-400 text-sm hover:bg-blue-500/30 transition-colors"
                                 >
-                                    <TrendingUp size={20} />
-                                    Withdraw All ({parseFloat(balance).toFixed(6)} ETH)
+                                    MAX
                                 </button>
                             </div>
+                            <p className="text-sm text-gray-400 mt-2">
+                                Available: <strong>{parseFloat(balance).toFixed(6)} ETH</strong>
+                            </p>
                         </div>
-                    </div>
 
-                    {/* Info Card */}
-                    <div className="card bg-yellow-500/5 border-yellow-500/20">
-                        <p className="text-sm text-gray-400">
-                            <strong className="text-yellow-500">Note:</strong> Withdrawn funds will be sent to your connected wallet address.
-                            Make sure you're connected with the correct admin account.
-                        </p>
-                    </div>
+                        <button
+                            onClick={handleWithdraw}
+                            disabled={withdrawing || !withdrawAmount || parseFloat(withdrawAmount) <= 0}
+                            className="btn btn-primary w-full"
+                        >
+                            {withdrawing ? (
+                                <>
+                                    <span className="spinner"></span>
+                                    Withdrawing...
+                                </>
+                            ) : (
+                                <>
+                                    <DollarSign size={20} />
+                                    Withdraw Funds
+                                </>
+                            )}
+                        </button>
+                    </motion.div>
+
+                    {/* Warning */}
+                    <motion.div
+                        initial={{ opacity: 0 }}
+                        animate={{ opacity: 1 }}
+                        transition={{ delay: 0.5 }}
+                        className="card bg-yellow-500/5 border-yellow-500/20 mt-6"
+                    >
+                        <div className="flex items-start gap-3">
+                            <AlertCircle className="text-yellow-500 flex-shrink-0 mt-0.5" size={20} />
+                            <div>
+                                <p className="font-semibold text-yellow-500 mb-1">Important</p>
+                                <p className="text-sm text-gray-400">
+                                    Only withdraw funds that are not reserved for active proposals. Withdrawing too much
+                                    may prevent gas sponsorship from working properly.
+                                </p>
+                            </div>
+                        </div>
+                    </motion.div>
                 </motion.div>
             </div>
         </div>

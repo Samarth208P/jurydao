@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useContract } from '../hooks/useContract'
 import { useWallet } from '../context/WalletContext'
-import { ArrowLeft, ThumbsUp, ThumbsDown, Users, Clock, User, CheckCircle, AlertCircle, Activity, Zap } from 'lucide-react'
+import { ArrowLeft, ThumbsUp, ThumbsDown, Users, Clock, User, CheckCircle, AlertCircle, Activity, Zap, DollarSign } from 'lucide-react'
 import LoadingSpinner from '../components/LoadingSpinner'
 import Modal from '../components/Modal'
 import { motion } from 'framer-motion'
@@ -51,6 +51,8 @@ const ProposalDetail = () => {
                 deadline: data[5] || 0n,
                 state: data[6] || 0,
                 jurySize: data[7] || 0n,
+                feesSponsoredByProposer: data[8] || false,
+                gasPerVote: data[9] || 0n,
             }
 
             setProposal(proposalData)
@@ -91,13 +93,7 @@ const ProposalDetail = () => {
                 setJurors([])
             }
 
-            console.log('✅ Proposal loaded:', {
-                title: proposalData.title,
-                jurySize,
-                deadline: new Date(Number(proposalData.deadline) * 1000).toLocaleString(),
-                voteProgress: `${totalVotesCast}/${jurySize}`,
-                state: proposalData.state,
-            })
+            console.log('✅ Proposal loaded')
         } catch (error) {
             console.error('Fetch proposal error:', error)
             toast.error('Failed to load proposal')
@@ -239,7 +235,7 @@ const ProposalDetail = () => {
 
     const isActive = Number(proposal.state) === 1 && now < Number(proposal.deadline)
     const canVote = isSelectedJuror && !hasVoted && isActive
-    const canExecute = Number(proposal.state) === 1 && now >= Number(proposal.deadline)
+    const canExecute = Number(proposal.state) === 1 && (now >= Number(proposal.deadline) || voteProgress.votesCast >= voteProgress.total)
     const allVoted = voteProgress.votesCast >= voteProgress.total && voteProgress.total > 0
     const voteProgressPercent = voteProgress.total > 0 ? (voteProgress.votesCast / voteProgress.total) * 100 : 0
 
@@ -262,7 +258,6 @@ const ProposalDetail = () => {
             <div className="container mx-auto px-4 max-w-4xl">
                 <motion.div initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}>
 
-                    {/* Back Button */}
                     <button
                         onClick={() => navigate('/dashboard')}
                         className="flex items-center gap-2 text-gray-400 hover:text-gray-100 mb-6 transition-colors"
@@ -274,8 +269,8 @@ const ProposalDetail = () => {
                     {/* Header */}
                     <div className="bg-gray-800 rounded-lg p-6 mb-6 border border-gray-700 shadow-xl">
                         <div className="flex items-start justify-between mb-4">
-                            <h1 className="text-3xl font-bold flex-1">{proposal.title}</h1>
-                            <span className={`px-3 py-1 rounded-lg text-xs font-semibold border ${statusBadge.color}`}>
+                            <h1 className="text-3xl font-bold flex-1 pr-4">{proposal.title}</h1>
+                            <span className={`px-3 py-1 rounded-lg text-xs font-semibold border ${statusBadge.color} whitespace-nowrap`}>
                                 {statusBadge.text}
                             </span>
                         </div>
@@ -297,12 +292,18 @@ const ProposalDetail = () => {
                                 <Users size={16} />
                                 <span>{Number(proposal.jurySize)} Juror{Number(proposal.jurySize) !== 1 ? 's' : ''}</span>
                             </div>
+                            {proposal.feesSponsoredByProposer && (
+                                <div className="flex items-center gap-2 bg-green-500/10 px-2 py-1 rounded-lg border border-green-500/30">
+                                    <DollarSign size={16} className="text-green-400" />
+                                    <span className="text-green-400 font-semibold">Gas Sponsored</span>
+                                </div>
+                            )}
                         </div>
 
                         <p className="text-gray-300 whitespace-pre-wrap leading-relaxed">{proposal.description}</p>
                     </div>
 
-                    {/* Execute Call-to-Action - PROMINENTLY DISPLAYED */}
+                    {/* Execute Call-to-Action */}
                     {canExecute && (
                         <motion.div
                             initial={{ opacity: 0, scale: 0.95 }}

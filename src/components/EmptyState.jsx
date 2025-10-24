@@ -1,27 +1,25 @@
 import React from 'react'
-import { Link } from 'react-router-dom'
-import { FileQuestion } from 'lucide-react'
+import { Inbox } from 'lucide-react'
 import { motion } from 'framer-motion'
 
-const EmptyState = ({ title, description, action, icon: Icon = FileQuestion }) => {
+const EmptyState = ({ message = 'No items found', icon: Icon = Inbox }) => {
     return (
         <motion.div
-            initial={{ opacity: 0, scale: 0.95 }}
-            animate={{ opacity: 1, scale: 1 }}
-            className="flex flex-col items-center justify-center py-16 px-4"
+            initial={{ opacity: 0, y: 20 }}
+            animate={{ opacity: 1, y: 0 }}
+            transition={{ duration: 0.5 }}
+            className="flex flex-col items-center justify-center py-20 px-4"
         >
-            <div className="w-20 h-20 rounded-full bg-dark-card flex items-center justify-center mb-6">
-                <Icon size={40} className="text-gray-500" />
-            </div>
-
-            <h3 className="text-2xl font-bold mb-2 text-center">{title}</h3>
-            <p className="text-gray-400 text-center max-w-md mb-6">{description}</p>
-
-            {action && (
-                <Link to={action.to} className="btn btn-primary">
-                    {action.label}
-                </Link>
-            )}
+            <motion.div
+                animate={{ y: [0, -10, 0] }}
+                transition={{ duration: 2, repeat: Infinity, ease: 'easeInOut' }}
+                className="mb-6 p-8 bg-gradient-to-br from-blue-500/10 to-purple-500/10 rounded-full backdrop-blur-xl border border-blue-500/20"
+            >
+                <Icon size={64} className="text-gray-400" />
+            </motion.div>
+            <p className="text-gray-400 text-lg text-center max-w-md">
+                {message}
+            </p>
         </motion.div>
     )
 }
