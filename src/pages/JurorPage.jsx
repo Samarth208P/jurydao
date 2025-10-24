@@ -32,6 +32,7 @@ const JurorPage = () => {
         if (!registry || !account) return
 
         try {
+
             const status = await registry.isJuror(account)
             setIsJuror(status)
         } catch (error) {

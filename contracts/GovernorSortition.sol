@@ -98,7 +98,6 @@ contract GovernorSortition is IEntropyConsumer {
         if (_jurySize == 0) revert InvalidJurySize();
 
         uint256 availableJurors = registry.getJurorCount();
-        require(availableJurors > 0, "No jurors registered"); // ✅ FIX #2
         if (_jurySize > availableJurors) revert JurySizeExceedsAvailable();
         if (_votingPeriodSeconds < MIN_VOTING_PERIOD) revert VotingPeriodTooShort();
         if (_votingPeriodSeconds > MAX_VOTING_PERIOD) revert VotingPeriodTooLong();
@@ -134,12 +133,6 @@ contract GovernorSortition is IEntropyConsumer {
         uint64 sequenceNumber = entropy.requestWithCallback{value: entropyFee}(entropyProvider, userRandomNumber);
         sequenceToProposal[sequenceNumber] = proposalId;
 
-        // ✅ FIX #4: Refund excess ETH
-        if (msg.value > requiredFee) {
-            (bool success, ) = msg.sender.call{value: msg.value - requiredFee}("");
-            require(success, "Refund failed");
-        }
-
         return proposalId;
     }
 
@@ -160,14 +153,10 @@ contract GovernorSortition is IEntropyConsumer {
                 uint256 index = uint256(keccak256(abi.encodePacked(randomSeed, i))) % totalJurors;
                 address juror = registry.getJurorAtIndex(index);
 
-                // ✅ FIX #1: Prevent infinite loop
-                uint256 attempts = 0;
-                while (isSelectedJuror[proposalId][juror] && attempts < totalJurors) {
+                while (isSelectedJuror[proposalId][juror]) {
                     index = (index + 1) % totalJurors;
                     juror = registry.getJurorAtIndex(index);
-                    attempts++;
                 }
-                require(attempts < totalJurors, "Selection failed");
 
                 selectedJurors[i] = juror;
                 isSelectedJuror[proposalId][juror] = true;
@@ -192,7 +181,6 @@ contract GovernorSortition is IEntropyConsumer {
         emit JurorsSelected(proposalId, selectedJurors);
     }
 
-    // ... rest of the contract remains the same
     function vote(uint256 id, bool support) external {
         Proposal storage prop = proposals[id];
 
