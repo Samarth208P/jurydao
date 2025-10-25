@@ -2,7 +2,7 @@ import React, { useState, useEffect } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useContract } from '../hooks/useContract'
 import { useWallet } from '../context/WalletContext'
-import { ArrowLeft, Send, AlertCircle, FileText, Users, Calendar, DollarSign, Zap, CheckCircle2 } from 'lucide-react'
+import { ArrowLeft, Send, AlertCircle, FileText, Users, Calendar, DollarSign, CheckCircle2 } from 'lucide-react'
 import { ethers } from 'ethers'
 import toast from 'react-hot-toast'
 import { motion } from 'framer-motion'
@@ -13,22 +13,22 @@ const CreateProposal = () => {
     const [jurySize, setJurySize] = useState(0)
     const [selectedDate, setSelectedDate] = useState('')
     const [selectedTime, setSelectedTime] = useState('10:00')
-    const [sponsorFees, setSponsorFees] = useState(true)
     const [jurorCount, setJurorCount] = useState(0)
-    const [gasRefundAmount, setGasRefundAmount] = useState('0.001')
-    const [entropyFee, setEntropyFee] = useState('0.001')
     const [creating, setCreating] = useState(false)
-    const [loadingFees, setLoadingFees] = useState(true)
 
     const navigate = useNavigate()
     const { account, isConnected, connectWallet } = useWallet()
     const governor = useContract('governor')
     const registry = useContract('jurorRegistry')
 
+    // Updated constants with 3x multiplier
+    const BASE_FEE = 0.01 // Pyth Entropy base fee
+    const PYTH_FEE_MULTIPLIER = 3 // For callback gas
+    const GAS_PER_VOTE = 0.0005 // Per juror gas refund
+
     useEffect(() => {
         fetchJurorCount()
-        fetchContractFees()
-    }, [registry, governor])
+    }, [registry])
 
     useEffect(() => {
         const defaultDate = new Date()
@@ -38,7 +38,7 @@ const CreateProposal = () => {
 
     useEffect(() => {
         if (jurorCount > 0 && jurySize === 0) {
-            setJurySize(Math.min(jurorCount, 5)) // Default to 5 or max available
+            setJurySize(Math.min(jurorCount, 5))
         }
     }, [jurorCount])
 
@@ -48,34 +48,16 @@ const CreateProposal = () => {
         try {
             const count = await registry.getJurorCount()
             setJurorCount(Number(count))
+            console.log('📊 Available jurors:', Number(count))
         } catch (error) {
-            // Silent error
+            console.error('❌ Error fetching juror count:', error)
         }
     }
 
-    const fetchContractFees = async () => {
-        if (!governor) return
-
-        setLoadingFees(true)
-        try {
-            // Get gas refund amount from contract
-            const gasRefund = await governor.gasRefundAmount()
-            setGasRefundAmount(ethers.formatEther(gasRefund))
-
-            // Get entropy fee from contract (if available)
-            try {
-                const entropy = await governor.getEntropyFee()
-                setEntropyFee(ethers.formatEther(entropy))
-            } catch {
-                setEntropyFee('0.001')
-            }
-        } catch (error) {
-            // Use defaults if fetch fails
-            setGasRefundAmount('0.001')
-            setEntropyFee('0.001')
-        } finally {
-            setLoadingFees(false)
-        }
+    const calculateTotalCost = () => {
+        if (!jurySize) return (BASE_FEE * PYTH_FEE_MULTIPLIER).toFixed(4)
+        const total = (BASE_FEE * PYTH_FEE_MULTIPLIER) + (jurySize * GAS_PER_VOTE)
+        return total.toFixed(4)
     }
 
     const getDeadlineTimestamp = () => {
@@ -115,25 +97,6 @@ const CreateProposal = () => {
             return `${days} day${days > 1 ? 's' : ''} ${hours > 0 ? `${hours}h` : ''}`
         }
         return `${hours} hour${hours > 1 ? 's' : ''}`
-    }
-
-    const calculateTotalCost = () => {
-        // Base fee: 0.01 ETH (covers proposal creation + Pyth Entropy)
-        const baseFee = 0.01
-        const gasCost = sponsorFees ? (parseFloat(gasRefundAmount) * jurySize) : 0
-        return (baseFee + gasCost).toFixed(4)
-    }
-
-    const getFeesBreakdown = () => {
-        const baseFee = 0.01
-        const gasCost = sponsorFees ? (parseFloat(gasRefundAmount) * jurySize) : 0
-        const total = baseFee + gasCost
-
-        return {
-            base: baseFee,
-            gas: gasCost,
-            total
-        }
     }
 
     const handleSubmit = async (e) => {
@@ -179,7 +142,6 @@ const CreateProposal = () => {
 
         const votingPeriodSeconds = deadlineTimestamp - now
 
-        // Check voting period constraints (from contract)
         const MIN_PERIOD = 1 * 60 * 60 // 1 hour
         const MAX_PERIOD = 30 * 24 * 60 * 60 // 30 days
 
@@ -196,9 +158,17 @@ const CreateProposal = () => {
         setCreating(true)
 
         try {
-            // Calculate required ETH: 0.01 base + gas sponsorship
             const requiredAmount = calculateTotalCost()
             const value = ethers.parseEther(requiredAmount)
+
+            console.log('📝 Creating proposal:', {
+                title,
+                jurySize,
+                votingPeriod: votingPeriodSeconds,
+                payment: requiredAmount,
+                pythFee: (BASE_FEE * PYTH_FEE_MULTIPLIER).toFixed(4),
+                gasRefunds: (jurySize * GAS_PER_VOTE).toFixed(4)
+            })
 
             toast.loading('Creating proposal...', { id: 'create' })
 
@@ -207,19 +177,22 @@ const CreateProposal = () => {
                 description,
                 jurySize,
                 votingPeriodSeconds,
-                sponsorFees,
                 {
-                    value, // Send ETH with transaction
+                    value,
                     gasLimit: 500000
                 }
             )
 
+            console.log('📤 Transaction sent:', tx.hash)
             await tx.wait()
+            console.log('✅ Transaction confirmed')
 
-            toast.success('Proposal created successfully!', { id: 'create' })
+            toast.success('Proposal created! Jurors will be selected soon.', { id: 'create' })
 
             setTimeout(() => navigate('/dashboard'), 2000)
         } catch (error) {
+            console.error('❌ Error creating proposal:', error)
+
             let errorMsg = 'Failed to create proposal'
 
             if (error.code === 'ACTION_REJECTED') {
@@ -230,7 +203,7 @@ const CreateProposal = () => {
                 errorMsg = 'Voting period must be at least 1 hour'
             } else if (error.message?.includes('Voting period too long')) {
                 errorMsg = 'Voting period must be less than 30 days'
-            } else if (error.message?.includes('Insufficient') || error.message?.includes('insufficient funds')) {
+            } else if (error.message?.includes('Insufficient')) {
                 errorMsg = `Insufficient ETH. Need ${calculateTotalCost()} ETH`
             } else if (error.reason) {
                 errorMsg = error.reason
@@ -260,8 +233,6 @@ const CreateProposal = () => {
             </div>
         )
     }
-
-    const fees = getFeesBreakdown()
 
     return (
         <div className="min-h-screen py-8 px-4">
@@ -374,7 +345,7 @@ const CreateProposal = () => {
                                     <span className="text-2xl font-bold text-blue-400">{jurySize}</span>
                                 </label>
                                 <p className="text-xs text-gray-400 mb-3">
-                                    {jurorCount} jurors available
+                                    {jurorCount} jurors available • Each receives {GAS_PER_VOTE} ETH gas refund
                                 </p>
                                 <input
                                     type="range"
@@ -399,7 +370,6 @@ const CreateProposal = () => {
                                 </label>
 
                                 <div className="grid grid-cols-2 gap-4">
-                                    {/* Date Input */}
                                     <div>
                                         <label className="text-xs text-gray-400 mb-2 block">Date</label>
                                         <input
@@ -412,7 +382,6 @@ const CreateProposal = () => {
                                         />
                                     </div>
 
-                                    {/* Time Input */}
                                     <div>
                                         <label className="text-xs text-gray-400 mb-2 block">Time</label>
                                         <input
@@ -425,7 +394,6 @@ const CreateProposal = () => {
                                     </div>
                                 </div>
 
-                                {/* Combined Display */}
                                 {selectedDate && selectedTime && (
                                     <motion.div
                                         initial={{ opacity: 0, y: -5 }}
@@ -451,82 +419,43 @@ const CreateProposal = () => {
 
                     {/* Right Column - Summary Sidebar */}
                     <div className="space-y-6">
-                        {/* Gas Sponsorship Card */}
-                        <div className="card">
-                            <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-800/50">
-                                <div className="p-2 rounded-lg bg-green-500/10">
-                                    <Zap size={20} className="text-green-400" />
-                                </div>
-                                <h2 className="text-lg font-bold">Gas Fees</h2>
-                            </div>
-
-                            {/* Toggle */}
-                            <label className="flex items-center gap-3 p-3 rounded-lg bg-blue-500/5 border border-blue-500/20 cursor-pointer hover:bg-blue-500/10 transition-all mb-4">
-                                <input
-                                    type="checkbox"
-                                    checked={sponsorFees}
-                                    onChange={(e) => setSponsorFees(e.target.checked)}
-                                    className="w-5 h-5 rounded border-gray-600 text-blue-500 focus:ring-blue-500 focus:ring-offset-0"
-                                />
-                                <div className="flex-1">
-                                    <div className="font-semibold text-sm">Sponsor Gas Fees</div>
-                                    <div className="text-xs text-gray-400">Pay for juror voting costs</div>
-                                </div>
-                            </label>
-
-                            <p className="text-xs text-gray-400 p-3 rounded-lg bg-gray-900/50">
-                                {sponsorFees
-                                    ? `~${gasRefundAmount} ETH per juror (${jurySize} jurors)`
-                                    : 'Jurors pay their own gas fees'
-                                }
-                            </p>
-                        </div>
-
                         {/* Cost Summary Card */}
                         <div className="card bg-gradient-to-br from-blue-500/10 to-purple-500/10 border-blue-500/20">
                             <div className="flex items-center gap-2 mb-4 pb-4 border-b border-gray-700/50">
                                 <div className="p-2 rounded-lg bg-blue-500/20">
                                     <DollarSign size={20} className="text-blue-400" />
                                 </div>
-                                <h2 className="text-lg font-bold">Required Payment</h2>
+                                <h2 className="text-lg font-bold">Cost Breakdown</h2>
                             </div>
 
-                            {loadingFees ? (
-                                <div className="flex items-center justify-center py-4">
-                                    <div className="spinner"></div>
+                            <div className="space-y-3 mb-4">
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-400">Pyth Fee (3x):</span>
+                                    <span className="font-semibold">{(BASE_FEE * PYTH_FEE_MULTIPLIER).toFixed(4)} ETH</span>
                                 </div>
-                            ) : (
-                                <>
-                                    <div className="space-y-3 mb-4">
-                                        <div className="flex justify-between text-sm">
-                                            <span className="text-gray-400">Base + Entropy Fee:</span>
-                                            <span className="font-semibold">{fees.base.toFixed(4)} ETH</span>
-                                        </div>
 
-                                        {sponsorFees && (
-                                            <div className="flex justify-between text-sm">
-                                                <span className="text-gray-400">
-                                                    Gas Refunds ({jurySize}):
-                                                </span>
-                                                <span className="font-semibold">{fees.gas.toFixed(4)} ETH</span>
-                                            </div>
-                                        )}
+                                <div className="flex justify-between text-sm">
+                                    <span className="text-gray-400">
+                                        Gas Refunds ({jurySize} jurors):
+                                    </span>
+                                    <span className="font-semibold">
+                                        {(jurySize * GAS_PER_VOTE).toFixed(4)} ETH
+                                    </span>
+                                </div>
 
-                                        <div className="pt-3 border-t border-gray-700/50">
-                                            <div className="flex justify-between items-center">
-                                                <span className="text-blue-400 font-bold">Total:</span>
-                                                <span className="text-blue-400 font-bold text-2xl">
-                                                    {fees.total.toFixed(4)} ETH
-                                                </span>
-                                            </div>
-                                        </div>
+                                <div className="pt-3 border-t border-gray-700/50">
+                                    <div className="flex justify-between items-center">
+                                        <span className="text-blue-400 font-bold">Total:</span>
+                                        <span className="text-blue-400 font-bold text-2xl">
+                                            {calculateTotalCost()} ETH
+                                        </span>
                                     </div>
+                                </div>
+                            </div>
 
-                                    <p className="text-xs text-gray-400 p-3 rounded-lg bg-gray-900/50">
-                                        Required payment includes proposal creation and Pyth Entropy fees. Unspent gas refunds can be withdrawn by contract owner.
-                                    </p>
-                                </>
-                            )}
+                            <p className="text-xs text-gray-400 p-3 rounded-lg bg-gray-900/50">
+                                💡 3x Pyth fee ensures enough gas for callback execution. Jurors receive automatic gas refunds when voting.
+                            </p>
                         </div>
 
                         {/* Info Card */}
@@ -542,7 +471,7 @@ const CreateProposal = () => {
                         {/* Submit Button */}
                         <button
                             type="submit"
-                            disabled={creating || jurorCount === 0 || loadingFees}
+                            disabled={creating || jurorCount === 0}
                             className="btn btn-primary w-full py-4 text-lg"
                         >
                             {creating ? (
@@ -553,7 +482,7 @@ const CreateProposal = () => {
                             ) : (
                                 <>
                                     <Send size={20} />
-                                    Create Proposal
+                                    Create Proposal ({calculateTotalCost()} ETH)
                                 </>
                             )}
                         </button>

@@ -1,48 +1,40 @@
-// Proposal States (matches contract enum)
-export const PROPOSAL_STATES = {
-    PENDING: 0,
-    ACTIVE: 1,
-    DEFEATED: 2,
-    SUCCEEDED: 3,
-    EXECUTED: 4,
+// Gas costs (unchanged)
+export const GAS_REFUND_PER_VOTE = '0.0005'
+export const BASE_FEE = '0.01'
+
+// Add multiplier constant
+export const PYTH_FEE_MULTIPLIER = 3
+
+// Update calculation function
+export const calculateProposalCost = (jurySize) => {
+    const pythFee = parseFloat(BASE_FEE) * PYTH_FEE_MULTIPLIER // 0.01 * 3 = 0.03
+    const refunds = jurySize * parseFloat(GAS_REFUND_PER_VOTE)
+    return (pythFee + refunds).toFixed(4) // Return string with 4 decimals
 }
 
-export const STATE_LABELS = {
+// Proposal costs
+export const MIN_VOTING_PERIOD = 3600 // 1 hour in seconds
+export const MAX_VOTING_PERIOD = 2592000 // 30 days in seconds
+export const VOTING_PERIOD_OPTIONS = [
+    { value: 259200, label: '3 Days' },
+    { value: 432000, label: '5 Days' },
+    { value: 604800, label: '7 Days' },
+    { value: 1209600, label: '14 Days' }
+]
+
+// Proposal states
+export const STATE_NAMES = {
     0: 'Pending',
     1: 'Active',
     2: 'Defeated',
     3: 'Succeeded',
-    4: 'Executed',
+    4: 'Executed'
 }
 
 export const STATE_COLORS = {
-    0: 'bg-yellow-500/10 text-yellow-400 border-yellow-500/20',
-    1: 'bg-blue-500/10 text-blue-400 border-blue-500/20',
-    2: 'bg-red-500/10 text-red-400 border-red-500/20',
-    3: 'bg-green-500/10 text-green-400 border-green-500/20',
-    4: 'bg-purple-500/10 text-purple-400 border-purple-500/20',
-}
-
-// Voting Period Limits (from contract)
-export const MIN_VOTING_PERIOD = 1 * 60 * 60 // 1 hour in seconds
-export const MAX_VOTING_PERIOD = 30 * 24 * 60 * 60 // 30 days in seconds
-export const DEFAULT_VOTING_PERIOD = 7 * 24 * 60 * 60 // 7 days in seconds
-
-// Gas Refund (default, can be changed by owner)
-export const DEFAULT_GAS_REFUND = '0.001' // ETH per vote
-
-// Explorer Link Helper
-export const getExplorerLink = (type, value, chainId = 84532) => {
-    const baseUrl = 'https://sepolia.basescan.org'
-
-    switch (type) {
-        case 'address':
-            return `${baseUrl}/address/${value}`
-        case 'tx':
-            return `${baseUrl}/tx/${value}`
-        case 'token':
-            return `${baseUrl}/token/${value}`
-        default:
-            return baseUrl
-    }
+    0: 'text-yellow-600 bg-yellow-50',
+    1: 'text-blue-600 bg-blue-50',
+    2: 'text-red-600 bg-red-50',
+    3: 'text-green-600 bg-green-50',
+    4: 'text-purple-600 bg-purple-50'
 }
